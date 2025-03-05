@@ -103,6 +103,10 @@
             font-size: 16px;
             margin-bottom: 20px;
         }
+        #current-track-info {
+            margin-top: 10px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -123,6 +127,7 @@
     </div>
 
     <div id="player-screen" class="screen">
+        <div id="current-track-info">Ready to play...</div>
         <div class="player-controls">
             <button id="play-pause" class="player-button">▶️</button>
             <button id="seek-forward" class="player-button">⏩</button>
@@ -172,6 +177,7 @@
         const readerElement = document.getElementById('reader');
         const statusElement = document.getElementById('status');
         const gameModeSelect = document.getElementById('game-mode');
+        const trackInfoElement = document.getElementById('current-track-info');
 
         // Buttons
         const playPauseBtn = document.getElementById('play-pause');
@@ -181,6 +187,7 @@
         let accessToken = null;
         let html5QrCode = null;
         let currentTrackUri = null;
+        let currentTrackName = '';
         let spotifyPlayer = null;
         let deviceId = null;
         let isPlaying = false;
@@ -188,9 +195,21 @@
         let randomSegmentEnd = 0;
         let trackDuration = 0;
         let positionCheckInterval = null;
+        let playerReady = false;
 
         window.onSpotifyWebPlaybackSDKReady = () => {
             logDebug('Spotify Web Playback SDK is ready');
+            
+            if (!accessToken) {
+                logDebug('No access token available yet');
+                return;
+            }
+            
+            initializeSpotifyPlayer();
+        };
+        
+        function initializeSpotifyPlayer() {
+            logDebug('Initializing Spotify Player with token');
             
             spotifyPlayer = new Spotify.Player({
                 name: 'Spotify QR Scanner',
@@ -220,8 +239,18 @@
 
             spotifyPlayer.addListener('player_state_changed', state => {
                 if (state) {
+                    logDebug(`Player state changed: ${state.paused ? 'Paused' : 'Playing'} at position ${state.position}ms`);
+                    
                     isPlaying = !state.paused;
                     updatePlayPauseButton();
+                    
+                    // Update track info if available
+                    if (state.track_window && state.track_window.current_track) {
+                        const track = state.track_window.current_track;
+                        currentTrackName = track.name;
+                        const artists = track.artists.map(a => a.name).join(', ');
+                        trackInfoElement.textContent = `${track.name} - ${artists}`;
+                    }
                     
                     // Start position check interval when playing in random10 mode
                     if (isPlaying && gameModeSelect.value === 'random10') {
@@ -235,12 +264,20 @@
             spotifyPlayer.addListener('ready', ({ device_id }) => {
                 logDebug(`Spotify Player Ready. Device ID: ${device_id}`);
                 deviceId = device_id;
+                playerReady = true;
+                
+                // If we already have a track URI waiting, start playback
+                if (currentTrackUri) {
+                    startPlayback(currentTrackUri);
+                }
             });
 
             spotifyPlayer.addListener('not_ready', ({ device_id }) => {
                 logDebug(`Device ID has gone offline: ${device_id}`, true);
+                playerReady = false;
             });
 
+            logDebug('Connecting Spotify Player...');
             spotifyPlayer.connect().then(success => {
                 if (success) {
                     logDebug('Spotify Player Connected Successfully');
@@ -250,18 +287,31 @@
             }).catch(error => {
                 logDebug(`Connection Error: ${error}`, true);
             });
-        };
+        }
         
         function startPositionCheck() {
             // Clear any existing interval
             clearPositionCheckInterval();
             
+            logDebug('Starting position check interval');
+            
             // Set a new interval to check position every 500ms
             positionCheckInterval = setInterval(async () => {
                 try {
+                    if (!spotifyPlayer) {
+                        logDebug('No Spotify player available', true);
+                        clearPositionCheckInterval();
+                        return;
+                    }
+                    
                     // Get current state
                     const state = await spotifyPlayer.getCurrentState();
-                    if (state && state.position >= randomSegmentEnd) {
+                    if (!state) {
+                        logDebug('No player state available');
+                        return;
+                    }
+                    
+                    if (state.position >= randomSegmentEnd) {
                         logDebug(`Position check: ${state.position}ms >= ${randomSegmentEnd}ms, pausing`);
                         spotifyPlayer.pause();
                         isPlaying = false;
@@ -278,6 +328,7 @@
             if (positionCheckInterval) {
                 clearInterval(positionCheckInterval);
                 positionCheckInterval = null;
+                logDebug('Position check interval cleared');
             }
         }
 
@@ -321,19 +372,36 @@
 
                     const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
 
-                    html5QrCode = new Html5Qrcode("reader");
-                    html5QrCode.start(
-                        cameraToUse, 
-                        { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
-                        onScanSuccess,
-                        (error) => {
-                            logDebug(`QR Scanner Error: ${error}`, true);
-                        }
-                    );
+                    if (html5QrCode) {
+                        html5QrCode.stop().then(() => {
+                            startCamera(cameraToUse);
+                        }).catch(err => {
+                            startCamera(cameraToUse);
+                        });
+                    } else {
+                        html5QrCode = new Html5Qrcode("reader");
+                        startCamera(cameraToUse);
+                    }
                 }
             }).catch(error => {
                 logDebug(`Camera Error: ${error}`, true);
             });
+            
+            function startCamera(cameraId) {
+                html5QrCode.start(
+                    cameraId, 
+                    { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
+                    onScanSuccess,
+                    (error) => {
+                        // Don't log every frame error
+                        if (error !== "QR code parse error, error = QR code not found.") {
+                            logDebug(`QR Scanner Error: ${error}`, true);
+                        }
+                    }
+                ).catch(err => {
+                    logDebug(`Camera Start Error: ${err}`, true);
+                });
+            }
         }
 
         function onScanSuccess(decodedText) {
@@ -347,10 +415,23 @@
                 const trackId = trackIdMatch[1];
                 currentTrackUri = `spotify:track:${trackId}`;
                 
-                html5QrCode.stop();
-                startPlayback(currentTrackUri);
-                
-                switchToScreen(playerScreen);
+                html5QrCode.stop().then(() => {
+                    logDebug('QR scanner stopped');
+                    if (playerReady) {
+                        startPlayback(currentTrackUri);
+                    } else {
+                        logDebug('Player not ready, waiting before playback');
+                    }
+                    
+                    switchToScreen(playerScreen);
+                }).catch(err => {
+                    logDebug(`Error stopping QR scanner: ${err}`, true);
+                    if (playerReady) {
+                        startPlayback(currentTrackUri);
+                    }
+                    
+                    switchToScreen(playerScreen);
+                });
             }
         }
 
@@ -358,7 +439,13 @@
             logDebug(`Attempting to play track: ${trackUri}`);
             
             try {
-                // First, get track duration
+                if (!deviceId) {
+                    logDebug('No device ID available yet. Waiting for Spotify player to be ready.', true);
+                    trackInfoElement.textContent = 'Waiting for Spotify player to be ready...';
+                    return;
+                }
+                
+                // First, get track information
                 const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${trackUri.split(':')[2]}`, {
                     headers: {
                         'Authorization': `Bearer ${accessToken}`
@@ -366,24 +453,32 @@
                 });
 
                 if (!trackResponse.ok) {
-                    logDebug('Error getting track duration', true);
+                    logDebug(`Error getting track: ${trackResponse.status}`, true);
+                    trackInfoElement.textContent = 'Error loading track information';
                     return;
                 }
 
                 const trackData = await trackResponse.json();
                 trackDuration = trackData.duration_ms;
-                logDebug(`Track duration: ${trackDuration}ms`);
+                currentTrackName = trackData.name;
+                const artistNames = trackData.artists.map(a => a.name).join(', ');
+                
+                // Update track info display
+                trackInfoElement.textContent = `${trackData.name} - ${artistNames}`;
+                
+                logDebug(`Track information: "${trackData.name}" by ${artistNames}, duration: ${trackDuration}ms`);
 
                 // Set random segment if in that mode
                 if (gameModeSelect.value === 'random10') {
-                    // Randomly select a 10-second segment
+                    // Make sure we don't start too close to the end
                     const maxStartTime = Math.max(0, trackDuration - 10000);
                     randomSegmentStart = Math.floor(Math.random() * maxStartTime);
                     randomSegmentEnd = randomSegmentStart + 10000;
                     logDebug(`Random segment: ${randomSegmentStart}ms to ${randomSegmentEnd}ms`);
                 }
 
-                // Transfer playback to our device
+                // First, make sure we're the active device
+                logDebug(`Attempting to transfer playback to device ID: ${deviceId}`);
                 const transferResponse = await fetch('https://api.spotify.com/v1/me/player', {
                     method: 'PUT',
                     headers: {
@@ -392,17 +487,32 @@
                     },
                     body: JSON.stringify({
                         device_ids: [deviceId],
-                        play: true  // Immediately start playing
+                        play: false  // Don't start playing yet
                     })
                 });
 
+                // Check response and handle potential errors
                 if (!transferResponse.ok) {
-                    const errorText = await transferResponse.text();
-                    logDebug(`Transfer Playback Error: ${errorText}`, true);
-                    return;
+                    // For 204 No Content, this is actually a success
+                    if (transferResponse.status !== 204) {
+                        try {
+                            const errorText = await transferResponse.text();
+                            logDebug(`Transfer Playback Error: ${transferResponse.status} ${errorText}`, true);
+                        } catch (e) {
+                            logDebug(`Transfer Playback Error: ${transferResponse.status}`, true);
+                        }
+                        
+                        // Still try to continue with playback
+                    } else {
+                        logDebug('Device transfer successful (204 No Content)');
+                    }
                 }
 
-                // Play the track
+                // Wait a bit to make sure the device transfer has taken effect
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Now play the track
+                logDebug(`Starting playback of track ${trackUri} on device ${deviceId}`);
                 const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
                     method: 'PUT',
                     headers: {
@@ -415,9 +525,17 @@
                     })
                 });
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    logDebug(`Playback Start Error: ${errorText}`, true);
+                if (!response.ok && response.status !== 204) {
+                    try {
+                        const errorText = await response.text();
+                        logDebug(`Playback Start Error: ${response.status} ${errorText}`, true);
+                        
+                        // Try alternative method - using player SDK directly
+                        logDebug('Trying alternative playback method...');
+                        spotifyPlayer.resume();
+                    } catch (e) {
+                        logDebug(`Playback Start Error: ${response.status}`, true);
+                    }
                 } else {
                     logDebug('Playback started successfully');
                     isPlaying = true;
@@ -430,88 +548,197 @@
                 }
             } catch (error) {
                 logDebug(`Playback Error: ${error}`, true);
+                
+                // Try fallback method
+                try {
+                    logDebug('Trying fallback playback method...');
+                    await fetch(`https://api.spotify.com/v1/me/player/play`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            uris: [trackUri],
+                            position_ms: gameModeSelect.value === 'random10' ? randomSegmentStart : 0
+                        })
+                    });
+                    logDebug('Fallback playback attempt completed');
+                } catch (fallbackError) {
+                    logDebug(`Fallback playback error: ${fallbackError}`, true);
+                }
+            }
+        }
+
+        async function togglePlayPause() {
+            logDebug('Toggle play/pause requested');
+            
+            if (!spotifyPlayer) {
+                logDebug('No Spotify player available', true);
+                return;
+            }
+            
+            try {
+                if (isPlaying) {
+                    logDebug('Pausing playback...');
+                    await spotifyPlayer.pause();
+                    clearPositionCheckInterval();
+                } else {
+                    // In random 10 seconds mode, if paused, seek to segment start
+                    if (gameModeSelect.value === 'random10') {
+                        logDebug(`Seeking to segment start at ${randomSegmentStart}ms`);
+                        await spotifyPlayer.seek(randomSegmentStart);
+                    }
+                    
+                    logDebug('Resuming playback...');
+                    await spotifyPlayer.resume();
+                    
+                    if (gameModeSelect.value === 'random10') {
+                        startPositionCheck();
+                    }
+                }
+            } catch (error) {
+                logDebug(`Toggle play/pause error: ${error}`, true);
+                
+                // Try API fallback for play/pause
+                try {
+                    const endpoint = isPlaying ? 
+                        'https://api.spotify.com/v1/me/player/pause' : 
+                        'https://api.spotify.com/v1/me/player/play';
+                    
+                    logDebug(`Using API fallback for ${isPlaying ? 'pause' : 'play'}`);
+                    
+                    const response = await fetch(endpoint, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                    
+                    if (!response.ok && response.status !== 204) {
+                        const errorText = await response.text();
+                        logDebug(`API play/pause error: ${response.status} ${errorText}`, true);
+                    } else {
+                        isPlaying = !isPlaying;
+                        updatePlayPauseButton();
+                        
+                        if (isPlaying && gameModeSelect.value === 'random10') {
+                            startPositionCheck();
+                        } else if (!isPlaying) {
+                            clearPositionCheckInterval();
+                        }
+                    }
+                } catch (apiError) {
+                    logDebug(`API play/pause fallback error: ${apiError}`, true);
+                }
             }
         }
 
         async function seekForward() {
+            logDebug('Seek forward requested');
+            
+            if (!spotifyPlayer) {
+                logDebug('No Spotify player available', true);
+                return;
+            }
+            
             try {
                 // In random 10 seconds mode, replay the segment
                 if (gameModeSelect.value === 'random10') {
-                    spotifyPlayer.seek(randomSegmentStart);
+                    logDebug(`Seeking to segment start at ${randomSegmentStart}ms`);
+                    await spotifyPlayer.seek(randomSegmentStart);
+                    
                     if (!isPlaying) {
-                        spotifyPlayer.resume();
+                        await spotifyPlayer.resume();
+                        isPlaying = true;
+                        updatePlayPauseButton();
                         startPositionCheck();
                     }
                     return;
                 }
 
                 // For full song mode, seek 10 seconds forward
-                const response = await fetch('https://api.spotify.com/v1/me/player', {
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-
-                if (!response.ok) {
-                    logDebug('Error getting playback state', true);
+                const state = await spotifyPlayer.getCurrentState();
+                if (!state) {
+                    logDebug('No player state available');
                     return;
                 }
-
-                const state = await response.json();
-                const currentPosition = state.progress_ms || 0;
-                const newPosition = currentPosition + 10000;
-
-                const seekResponse = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPosition}&device_id=${deviceId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-                if (!seekResponse.ok) {
-                    const errorText = await seekResponse.text();
-                    logDebug(`Seek Error: ${errorText}`, true);
-                } else {
-                    logDebug(`Seeked to ${newPosition/1000} seconds`);
-                }
+                
+                const currentPosition = state.position;
+                const newPosition = Math.min(trackDuration, currentPosition + 10000);
+                
+                logDebug(`Seeking from ${currentPosition}ms to ${newPosition}ms`);
+                await spotifyPlayer.seek(newPosition);
+                
             } catch (error) {
-                logDebug(`Seek Error: ${error}`, true);
+                logDebug(`Seek error: ${error}`, true);
+                
+                // Try API fallback for seeking
+                try {
+                    // Get current position first
+                    const response = await fetch('https://api.spotify.com/v1/me/player', {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        logDebug(`Error getting playback state: ${response.status}`, true);
+                        return;
+                    }
+
+                    const state = await response.json();
+                    const currentPosition = state.progress_ms || 0;
+                    
+                    // Calculate new position
+                    let newPosition;
+                    if (gameModeSelect.value === 'random10') {
+                        newPosition = randomSegmentStart;
+                    } else {
+                        newPosition = Math.min(trackDuration, currentPosition + 10000);
+                    }
+
+                    // Perform seek
+                    const seekResponse = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPosition}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                    
+                    if (!seekResponse.ok && seekResponse.status !== 204) {
+                        const errorText = await seekResponse.text();
+                        logDebug(`API seek error: ${seekResponse.status} ${errorText}`, true);
+                    } else {
+                        logDebug(`API seeked to ${newPosition/1000} seconds`);
+                    }
+                } catch (apiError) {
+                    logDebug(`API seek fallback error: ${apiError}`, true);
+                }
             }
         }
 
         // Event Listeners
         spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
+        
         playPauseBtn.addEventListener('click', () => {
             logDebug('Play/Pause button clicked');
-            
-            // In random 10 seconds mode, if paused, seek to segment start and play
-            if (gameModeSelect.value === 'random10' && !isPlaying) {
-                spotifyPlayer.seek(randomSegmentStart);
-                spotifyPlayer.resume();
-                logDebug('Restarting segment at ' + randomSegmentStart + 'ms');
-                startPositionCheck();
-            } else {
-                // Normal toggle play behavior
-                if (isPlaying) {
-                    spotifyPlayer.pause();
-                    clearPositionCheckInterval();
-                } else {
-                    spotifyPlayer.resume();
-                    if (gameModeSelect.value === 'random10') {
-                        startPositionCheck();
-                    }
-                }
-            }
+            togglePlayPause();
         });
+        
         seekForwardBtn.addEventListener('click', () => {
             logDebug('Seek Forward button clicked');
             seekForward();
         });
+        
         returnToScannerBtn.addEventListener('click', () => {
             logDebug('Return to Scanner button clicked');
             
             // Stop playback before returning to scanner
             if (spotifyPlayer && isPlaying) {
-                spotifyPlayer.pause();
+                spotifyPlayer.pause().catch(err => {
+                    logDebug(`Error pausing player: ${err}`, true);
+                });
                 isPlaying = false;
             }
             
@@ -524,7 +751,7 @@
             logDebug(`Game mode changed to: ${gameModeSelect.value}`);
             
             // If we're currently playing a track, restart with the new mode
-            if (currentTrackUri && spotifyPlayer) {
+            if (currentTrackUri && deviceId) {
                 startPlayback(currentTrackUri);
             }
         });
@@ -552,6 +779,11 @@
                 
                 // Clear hash from URL
                 window.location.hash = '';
+                
+                // Initialize Spotify player if SDK is ready
+                if (window.Spotify) {
+                    initializeSpotifyPlayer();
+                }
                 
                 // Start QR scanner
                 startQRScanner();
