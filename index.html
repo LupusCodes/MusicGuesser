@@ -69,6 +69,13 @@
             cursor: pointer;
             font-size: 20px;
         }
+        #debug-info {
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            margin-top: 20px;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
     </style>
 </head>
 <body>
@@ -89,15 +96,17 @@
             <button id="next" class="player-button">⏭️</button>
         </div>
         <div id="track-info"></div>
+        <div id="debug-info"></div>
     </div>
 
     <script>
         const CLIENT_ID = '1325a171deaa4a0d91bf676e43c8485c'; // Replace with your actual Client ID
-        const REDIRECT_URI = window.location.href;
+        const REDIRECT_URI = window.location.href.split('#')[0];
         const SCOPES = [
             'user-read-playback-state', 
             'user-modify-playback-state', 
-            'user-read-currently-playing'
+            'user-read-currently-playing',
+            'streaming'
         ].join(' ');
 
         const loginScreen = document.getElementById('login-screen');
@@ -105,9 +114,20 @@
         const playerScreen = document.getElementById('player-screen');
         const spotifyLoginBtn = document.getElementById('spotify-login');
         const readerElement = document.getElementById('reader');
+        const playPauseBtn = document.getElementById('play-pause');
+        const previousBtn = document.getElementById('previous');
+        const nextBtn = document.getElementById('next');
+        const debugInfo = document.getElementById('debug-info');
 
         let accessToken = null;
         let html5QrCode = null;
+        let currentTrackUri = null;
+
+        // Debug logging function
+        function logDebug(message) {
+            console.log(message);
+            debugInfo.textContent += message + '\n';
+        }
 
         // Authentication Flow
         function initiateSpotifyLogin() {
@@ -139,29 +159,71 @@
 
         // Spotify API Calls
         async function fetchUserDevices() {
-            const response = await fetch('https://api.spotify.com/v1/me/player/devices', {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`
-                }
-            });
-            return await response.json();
+            try {
+                const response = await fetch('https://api.spotify.com/v1/me/player/devices', {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                const data = await response.json();
+                logDebug('Devices: ' + JSON.stringify(data));
+                return data;
+            } catch (error) {
+                logDebug('Error fetching devices: ' + error.message);
+                return null;
+            }
         }
 
         async function startPlayback(trackUri) {
-            const devices = await fetchUserDevices();
-            if (devices.devices && devices.devices.length) {
-                const deviceId = devices.devices[0].id;
-                await fetch('https://api.spotify.com/v1/me/player/play', {
-                    method: 'PUT',
+            try {
+                const devices = await fetchUserDevices();
+                if (devices && devices.devices && devices.devices.length) {
+                    const deviceId = devices.devices[0].id;
+                    logDebug(`Starting playback on device: ${deviceId}`);
+
+                    const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            device_id: deviceId,
+                            uris: [trackUri]
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        logDebug(`Playback start error: ${response.status} - ${errorText}`);
+                    } else {
+                        logDebug('Playback started successfully');
+                    }
+                } else {
+                    logDebug('No active devices found');
+                }
+            } catch (error) {
+                logDebug('Playback start error: ' + error.message);
+            }
+        }
+
+        async function controlPlayback(method) {
+            try {
+                const response = await fetch(`https://api.spotify.com/v1/me/player/${method}`, {
+                    method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        device_id: deviceId,
-                        uris: [trackUri]
-                    })
+                        'Authorization': `Bearer ${accessToken}`
+                    }
                 });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    logDebug(`${method} error: ${response.status} - ${errorText}`);
+                } else {
+                    logDebug(`${method} successful`);
+                }
+            } catch (error) {
+                logDebug(`${method} error: ` + error.message);
             }
         }
 
@@ -181,7 +243,7 @@
                         cameraToUse, 
                         { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
                         onScanSuccess,
-                        () => {} // Silent error handling
+                        (error) => logDebug('QR Scan error: ' + error)
                     );
                 }
             });
@@ -194,50 +256,11 @@
             
             if (trackIdMatch) {
                 const trackId = trackIdMatch[1];
-                const trackUri = `spotify:track:${trackId}`;
+                currentTrackUri = `spotify:track:${trackId}`;
                 
                 html5QrCode.stop();
-                startPlayback(trackUri);
+                startPlayback(currentTrackUri);
                 
                 switchToPlayerScreen();
             }
         }
-
-        // Screen Management
-        function switchToLoginScreen() {
-            loginScreen.style.display = 'flex';
-            scannerScreen.style.display = 'none';
-            playerScreen.style.display = 'none';
-        }
-
-        function switchToScannerScreen() {
-            loginScreen.style.display = 'none';
-            scannerScreen.style.display = 'flex';
-            playerScreen.style.display = 'none';
-            startQRScanner();
-        }
-
-        function switchToPlayerScreen() {
-            loginScreen.style.display = 'none';
-            scannerScreen.style.display = 'none';
-            playerScreen.style.display = 'flex';
-        }
-
-        // Event Listeners
-        spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
-
-        // Initialize
-        function init() {
-            const token = extractSpotifyToken();
-            if (token) {
-                accessToken = token;
-                switchToScannerScreen();
-            } else {
-                switchToLoginScreen();
-            }
-        }
-
-        init();
-    </script>
-</body>
-</html>
