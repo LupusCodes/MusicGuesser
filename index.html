@@ -443,12 +443,13 @@
             logDebug('Play/Pause button clicked');
             
             // In random 10 seconds mode, if paused, seek to segment start and play
-            if (gameModeSelect.value === 'random10' && !isPlaying) {
+            if (gameModeSelect.value === 'random10') {
+                if (!isPlaying) {
                 spotifyPlayer.seek(randomSegmentStart);
                 spotifyPlayer.resume();
-            } else {
-                // Normal toggle play behavior
-                spotifyPlayer.togglePlay();
+                } else {
+                spotifyPlayer.pause();
+                }
             }
         });
         seekForwardBtn.addEventListener('click', () => {
