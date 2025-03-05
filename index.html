@@ -187,7 +187,6 @@
         let randomSegmentStart = 0;
         let randomSegmentEnd = 0;
         let trackDuration = 0;
-        let segmentCheckInterval = null;
 
         window.onSpotifyWebPlaybackSDKReady = () => {
             logDebug('Spotify Web Playback SDK is ready');
@@ -224,7 +223,7 @@
                     if (gameModeSelect.value === 'random10') {
                         const currentPosition = state.position;
                         
-                        // If we've passed the segment end, stop playback
+                        // If we've passed the segment end, pause playback
                         if (currentPosition >= randomSegmentEnd) {
                             spotifyPlayer.pause();
                             isPlaying = false;
@@ -427,37 +426,6 @@
                         'Authorization': `Bearer ${accessToken}`
                     }
                 });
-
-        async function seekForward() {
-            try {
-                // In random 10 seconds mode, replay the segment
-                if (gameModeSelect.value === 'random10') {
-                    spotifyPlayer.seek(randomSegmentStart);
-                    return;
-                }
-
-                // For full song mode, seek 10 seconds forward
-                const response = await fetch('https://api.spotify.com/v1/me/player', {
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-
-                if (!response.ok) {
-                    logDebug('Error getting playback state', true);
-                    return;
-                }
-
-                const state = await response.json();
-                const currentPosition = state.progress_ms || 0;
-                const newPosition = currentPosition + 10000;
-
-                const seekResponse = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPosition}&device_id=${deviceId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
                 if (!seekResponse.ok) {
                     const errorText = await seekResponse.text();
                     logDebug(`Seek Error: ${errorText}`, true);
@@ -475,13 +443,9 @@
             logDebug('Play/Pause button clicked');
             
             // In random 10 seconds mode, if paused, seek to segment start and play
-            if (gameModeSelect.value === 'random10') {
-                if (!isPlaying) {
-                    spotifyPlayer.seek(randomSegmentStart);
-                    spotifyPlayer.resume();
-                } else {
-                    spotifyPlayer.pause();
-                }
+            if (gameModeSelect.value === 'random10' && !isPlaying) {
+                spotifyPlayer.seek(randomSegmentStart);
+                spotifyPlayer.resume();
             } else {
                 // Normal toggle play behavior
                 spotifyPlayer.togglePlay();
