@@ -19,8 +19,9 @@
             text-align: center;
         }
         #reader {
-            width: 90%;
+            width: 100%;
             max-width: 500px;
+            height: 400px;
             margin: 20px auto;
             border-radius: 15px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
@@ -29,80 +30,120 @@
             padding: 20px;
             font-size: 18px;
         }
-        #action-button {
+        #camera-select {
             background-color: #1DB954;
             color: white;
             border: none;
-            padding: 15px 30px;
-            font-size: 18px;
-            border-radius: 10px;
-            margin: 20px auto;
-            cursor: pointer;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
     <div id="status">Spotify QR Code Scanner</div>
-    <button id="action-button">Start Scanning</button>
+    <select id="camera-select" style="display:none;"></select>
     <div id="reader"></div>
 
     <script>
         const statusElement = document.getElementById('status');
-        const actionButton = document.getElementById('action-button');
         const readerElement = document.getElementById('reader');
-
-        actionButton.addEventListener('click', startQRScanner);
+        const cameraSelect = document.getElementById('camera-select');
+        let html5QrCode = null;
 
         function startQRScanner() {
-            // Immediately request camera access
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                .then(() => {
-                    // If permission granted, start the QR scanner
-                    const html5QrCode = new Html5Qrcode("reader");
+            // Get list of cameras
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length) {
+                    // Populate camera select dropdown
+                    cameraSelect.innerHTML = cameras.map((camera, index) => 
+                        `<option value="${camera.id}">Camera ${index + 1} (${camera.label})</option>`
+                    ).join('');
                     
-                    Html5Qrcode.getCameras().then(cameras => {
-                        if (cameras && cameras.length) {
-                            html5QrCode.start(
-                                cameras[0].id, 
-                                { fps: 10, qrbox: 250 },
-                                (decodedText) => {
-                                    // Spotify track detection
-                                    const trackIdMatch = 
-                                        decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
-                                        decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
-                                    
-                                    if (trackIdMatch) {
-                                        const trackId = trackIdMatch[1];
-                                        
-                                        // Stop scanning
-                                        html5QrCode.stop();
-                                        
-                                        // Create fullscreen player
-                                        document.body.innerHTML = `
-                                            <iframe 
-                                                style="position:fixed;top:0;left:0;width:100%;height:100%;border:none;" 
-                                                src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0" 
-                                                allow="encrypted-media"
-                                            ></iframe>
-                                        `;
-                                    }
-                                },
-                                () => {} // Error handler (empty to suppress errors)
-                            );
-                            
-                            statusElement.textContent = 'Scan Spotify QR Code';
-                            actionButton.style.display = 'none';
-                        } else {
-                            statusElement.textContent = 'No cameras found';
-                        }
-                    }).catch(err => {
-                        statusElement.textContent = 'Camera error: ' + err.message;
-                    });
-                })
-                .catch(err => {
-                    statusElement.textContent = 'Camera access denied. Please allow camera access in your browser settings.';
-                });
+                    // If multiple cameras, show selection
+                    if (cameras.length > 1) {
+                        cameraSelect.style.display = 'block';
+                    }
+
+                    // Attempt to find back/environment camera first
+                    const backCamera = cameras.find(camera => 
+                        camera.label.toLowerCase().includes('back') || 
+                        camera.label.toLowerCase().includes('environment')
+                    );
+
+                    // Select camera to use
+                    const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
+
+                    // Start QR code scanner
+                    html5QrCode = new Html5Qrcode("reader");
+                    html5QrCode.start(
+                        cameraToUse, 
+                        { 
+                            fps: 10, 
+                            qrbox: Math.min(readerElement.clientWidth * 0.8, 250)
+                        },
+                        onScanSuccess,
+                        onScanError
+                    );
+
+                    statusElement.textContent = 'Scan Spotify QR Code';
+                } else {
+                    statusElement.textContent = 'No cameras found';
+                }
+            }).catch(err => {
+                statusElement.textContent = 'Camera error: ' + err.message;
+                console.error(err);
+            });
         }
+
+        function onScanSuccess(decodedText) {
+            // Spotify track detection
+            const trackIdMatch = 
+                decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
+                decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+            
+            if (trackIdMatch) {
+                const trackId = trackIdMatch[1];
+                
+                // Stop scanning
+                html5QrCode.stop();
+                
+                // Create fullscreen player
+                document.body.innerHTML = `
+                    <iframe 
+                        style="position:fixed;top:0;left:0;width:100%;height:100%;border:none;" 
+                        src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0" 
+                        allow="encrypted-media"
+                    ></iframe>
+                `;
+            }
+        }
+
+        function onScanError(errorMessage) {
+            // Optional: Add some error logging or user feedback
+            console.log('Scan error:', errorMessage);
+        }
+
+        // Camera selection change handler
+        cameraSelect.addEventListener('change', (e) => {
+            if (html5QrCode) {
+                html5QrCode.stop();
+            }
+            
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                e.target.value, 
+                { 
+                    fps: 10, 
+                    qrbox: Math.min(readerElement.clientWidth * 0.8, 250)
+                },
+                onScanSuccess,
+                onScanError
+            );
+        });
+
+        // Start scanner when page loads
+        startQRScanner();
     </script>
 </body>
 </html>
