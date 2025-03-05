@@ -30,6 +30,15 @@
         #login-screen {
             display: flex;
         }
+        #reader {
+            width: 90vw;
+            height: 90vw;
+            max-width: 400px;
+            max-height: 400px;
+            margin: 20px auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
         .spotify-button {
             background-color: #1DB954;
             color: white;
@@ -40,6 +49,26 @@
             cursor: pointer;
             margin: 20px 0;
         }
+        .player-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .player-button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 20px;
+        }
     </style>
 </head>
 <body>
@@ -48,6 +77,19 @@
         <p>Click below to connect your Spotify account</p>
         <button id="spotify-login" class="spotify-button">Connect Spotify</button>
         <p id="error-message" style="color: red;"></p>
+    </div>
+
+    <div id="scanner-screen" class="screen">
+        <div id="status">Spotify QR Code Scanner</div>
+        <div id="reader"></div>
+    </div>
+
+    <div id="player-screen" class="screen">
+        <div class="player-controls">
+            <button id="previous" class="player-button">⏮️</button>
+            <button id="play-pause" class="player-button">▶️</button>
+            <button id="next" class="player-button">⏭️</button>
+        </div>
     </div>
 
     <script>
@@ -64,31 +106,130 @@
             'streaming'
         ].join(' ');
 
+        // Screen elements
+        const loginScreen = document.getElementById('login-screen');
+        const scannerScreen = document.getElementById('scanner-screen');
+        const playerScreen = document.getElementById('player-screen');
         const spotifyLoginBtn = document.getElementById('spotify-login');
-        const errorMessage = document.getElementById('error-message');
+        const readerElement = document.getElementById('reader');
+        const statusElement = document.getElementById('status');
+
+        // Buttons
+        const playPauseBtn = document.getElementById('play-pause');
+        const previousBtn = document.getElementById('previous');
+        const nextBtn = document.getElementById('next');
+
+        let accessToken = null;
+        let html5QrCode = null;
+        let currentTrackUri = null;
 
         function initiateSpotifyLogin() {
-            try {
-                // Construct the Spotify authorization URL
-                const authUrl = new URL('https://accounts.spotify.com/authorize');
-                authUrl.searchParams.set('client_id', CLIENT_ID);
-                authUrl.searchParams.set('response_type', 'token');
-                authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
-                authUrl.searchParams.set('scope', SCOPES);
-                authUrl.searchParams.set('show_dialog', 'true');
+            const authUrl = new URL('https://accounts.spotify.com/authorize');
+            authUrl.searchParams.set('client_id', CLIENT_ID);
+            authUrl.searchParams.set('response_type', 'token');
+            authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+            authUrl.searchParams.set('scope', SCOPES);
+            authUrl.searchParams.set('show_dialog', 'true');
+            
+            window.location.href = authUrl.toString();
+        }
+
+        function switchToScreen(screenElement) {
+            // Hide all screens
+            [loginScreen, scannerScreen, playerScreen].forEach(screen => {
+                screen.style.display = 'none';
+            });
+            
+            // Show selected screen
+            screenElement.style.display = 'flex';
+        }
+
+        function startQRScanner() {
+            switchToScreen(scannerScreen);
+
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length) {
+                    const backCamera = cameras.find(camera => 
+                        camera.label.toLowerCase().includes('back') || 
+                        camera.label.toLowerCase().includes('environment')
+                    );
+
+                    const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
+
+                    html5QrCode = new Html5Qrcode("reader");
+                    html5QrCode.start(
+                        cameraToUse, 
+                        { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
+                        onScanSuccess,
+                        () => {} // Silent error handling
+                    );
+                }
+            });
+        }
+
+        function onScanSuccess(decodedText) {
+            const trackIdMatch = 
+                decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
+                decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+            
+            if (trackIdMatch) {
+                const trackId = trackIdMatch[1];
+                currentTrackUri = `spotify:track:${trackId}`;
                 
-                // Redirect to Spotify login
-                window.location.href = authUrl.toString();
-            } catch (error) {
-                errorMessage.textContent = 'Login failed: ' + error.message;
+                html5QrCode.stop();
+                startPlayback(currentTrackUri);
+                
+                switchToScreen(playerScreen);
             }
         }
 
-        // Add click event to login button
-        spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
+        async function startPlayback(trackUri) {
+            try {
+                const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        uris: [trackUri]
+                    })
+                });
 
-        // Check for access token on page load
-        function checkForToken() {
+                if (!response.ok) {
+                    console.error('Playback start error:', await response.text());
+                }
+            } catch (error) {
+                console.error('Playback error:', error);
+            }
+        }
+
+        async function controlPlayback(method) {
+            try {
+                const response = await fetch(`https://api.spotify.com/v1/me/player/${method}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    console.error(`${method} error:`, await response.text());
+                }
+            } catch (error) {
+                console.error(`${method} error:`, error);
+            }
+        }
+
+        // Event Listeners
+        spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
+        playPauseBtn.addEventListener('click', () => controlPlayback('play'));
+        previousBtn.addEventListener('click', () => controlPlayback('previous'));
+        nextBtn.addEventListener('click', () => controlPlayback('next'));
+
+        // Initialize
+        function init() {
+            // Check for access token in URL hash
             const hash = window.location.hash
                 .substring(1)
                 .split('&')
@@ -101,19 +242,22 @@
                 }, {});
             
             if (hash.access_token) {
-                // Store token in localStorage
-                localStorage.setItem('spotify_access_token', hash.access_token);
+                // Store and use access token
+                accessToken = hash.access_token;
                 
-                // Clear the hash from the URL
+                // Clear hash from URL
                 window.location.hash = '';
                 
-                // Redirect to clean URL
-                window.location.href = REDIRECT_URI;
+                // Start QR scanner
+                startQRScanner();
+            } else {
+                // Show login screen if no token
+                switchToScreen(loginScreen);
             }
         }
 
-        // Run on page load
-        checkForToken();
+        // Run initialization
+        init();
     </script>
 </body>
 </html>
