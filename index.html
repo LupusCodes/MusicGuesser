@@ -343,9 +343,11 @@
             }
         }
 
+        
+
         async function seekForward() {
             try {
-                // Get current playback state to know current position
+                // Seek 10 seconds forward (10000 milliseconds)
                 const response = await fetch('https://api.spotify.com/v1/me/player', {
                     headers: {
                         'Authorization': `Bearer ${accessToken}`
@@ -378,6 +380,7 @@
                 logDebug(`Seek Error: ${error}`, true);
             }
         }
+
 
         // Event Listeners
         spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
