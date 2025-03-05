@@ -421,8 +421,12 @@
                 const currentPosition = state.progress_ms || 0;
                 const newPosition = currentPosition + 10000;
 
-                const seekResponse = await fetch(`https://api.spotify
-                (... previous code remains the same ...)
+                const seekResponse = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPosition}&device_id=${deviceId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
 
         async function seekForward() {
             try {
