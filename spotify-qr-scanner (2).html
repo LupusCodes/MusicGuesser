@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify QR Scanner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, #121212, #1DB954);
+            color: white;
+            overflow: hidden;
+            text-align: center;
+        }
+        #reader {
+            width: 90%;
+            max-width: 500px;
+            margin: 20px auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        #status {
+            padding: 20px;
+            font-size: 18px;
+        }
+        #action-button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 10px;
+            margin: 20px auto;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Spotify QR Code Scanner</div>
+    <button id="action-button">Start Scanning</button>
+    <div id="reader"></div>
+
+    <script>
+        const statusElement = document.getElementById('status');
+        const actionButton = document.getElementById('action-button');
+        const readerElement = document.getElementById('reader');
+
+        actionButton.addEventListener('click', startQRScanner);
+
+        function startQRScanner() {
+            // Immediately request camera access
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(() => {
+                    // If permission granted, start the QR scanner
+                    const html5QrCode = new Html5Qrcode("reader");
+                    
+                    Html5Qrcode.getCameras().then(cameras => {
+                        if (cameras && cameras.length) {
+                            html5QrCode.start(
+                                cameras[0].id, 
+                                { fps: 10, qrbox: 250 },
+                                (decodedText) => {
+                                    // Spotify track detection
+                                    const trackIdMatch = 
+                                        decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
+                                        decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+                                    
+                                    if (trackIdMatch) {
+                                        const trackId = trackIdMatch[1];
+                                        
+                                        // Stop scanning
+                                        html5QrCode.stop();
+                                        
+                                        // Create fullscreen player
+                                        document.body.innerHTML = `
+                                            <iframe 
+                                                style="position:fixed;top:0;left:0;width:100%;height:100%;border:none;" 
+                                                src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0" 
+                                                allow="encrypted-media"
+                                            ></iframe>
+                                        `;
+                                    }
+                                },
+                                () => {} // Error handler (empty to suppress errors)
+                            );
+                            
+                            statusElement.textContent = 'Scan Spotify QR Code';
+                            actionButton.style.display = 'none';
+                        } else {
+                            statusElement.textContent = 'No cameras found';
+                        }
+                    }).catch(err => {
+                        statusElement.textContent = 'Camera error: ' + err.message;
+                    });
+                })
+                .catch(err => {
+                    statusElement.textContent = 'Camera access denied. Please allow camera access in your browser settings.';
+                });
+        }
+    </script>
+</body>
+</html>
