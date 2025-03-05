@@ -223,9 +223,11 @@
                     if (gameModeSelect.value === 'random10') {
                         const currentPosition = state.position;
                         
-                        // If we've passed the segment end, restart from the start of the segment
+                        // If we've passed the segment end, pause playback
                         if (currentPosition >= randomSegmentEnd) {
-                            spotifyPlayer.seek(randomSegmentStart);
+                            spotifyPlayer.pause();
+                            isPlaying = false;
+                            updatePlayPauseButton();
                         }
                     }
 
@@ -422,9 +424,8 @@
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`
-                        }
+                    }
                 });
-
                 if (!seekResponse.ok) {
                     const errorText = await seekResponse.text();
                     logDebug(`Seek Error: ${errorText}`, true);
@@ -441,12 +442,14 @@
         playPauseBtn.addEventListener('click', () => {
             logDebug('Play/Pause button clicked');
             
-            // In random 10 seconds mode, if paused, restart from segment start
+            // In random 10 seconds mode, if paused, seek to segment start and play
             if (gameModeSelect.value === 'random10' && !isPlaying) {
                 spotifyPlayer.seek(randomSegmentStart);
+                spotifyPlayer.resume();
+            } else {
+                // Normal toggle play behavior
+                spotifyPlayer.togglePlay();
             }
-            
-            spotifyPlayer.togglePlay();
         });
         seekForwardBtn.addEventListener('click', () => {
             logDebug('Seek Forward button clicked');
