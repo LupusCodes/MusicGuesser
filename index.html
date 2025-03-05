@@ -19,6 +19,17 @@
             text-align: center;
             touch-action: manipulation;
         }
+        .screen {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            padding: 20px;
+        }
+        #login-screen {
+            display: flex;
+        }
         #reader {
             width: 90vw;
             height: 90vw;
@@ -28,9 +39,15 @@
             border-radius: 15px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
         }
-        #status {
-            padding: 10px;
-            font-size: 16px;
+        .spotify-button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 20px 0;
         }
         .player-controls {
             display: flex;
@@ -55,18 +72,103 @@
     </style>
 </head>
 <body>
-    <div id="status">Spotify QR Code Scanner</div>
-    <div id="reader"></div>
+    <div id="login-screen" class="screen">
+        <h2>Spotify QR Scanner</h2>
+        <button id="spotify-login" class="spotify-button">Connect Spotify</button>
+    </div>
+
+    <div id="scanner-screen" class="screen">
+        <div id="status">Spotify QR Code Scanner</div>
+        <div id="reader"></div>
+    </div>
+
+    <div id="player-screen" class="screen">
+        <div class="player-controls">
+            <button id="previous" class="player-button">⏮️</button>
+            <button id="play-pause" class="player-button">▶️</button>
+            <button id="next" class="player-button">⏭️</button>
+        </div>
+        <div id="track-info"></div>
+    </div>
 
     <script>
-        const statusElement = document.getElementById('status');
+        const CLIENT_ID = '1325a171deaa4a0d91bf676e43c8485c'; // Replace with your actual Client ID
+        const REDIRECT_URI = window.location.href;
+        const SCOPES = [
+            'user-read-playback-state', 
+            'user-modify-playback-state', 
+            'user-read-currently-playing'
+        ].join(' ');
+
+        const loginScreen = document.getElementById('login-screen');
+        const scannerScreen = document.getElementById('scanner-screen');
+        const playerScreen = document.getElementById('player-screen');
+        const spotifyLoginBtn = document.getElementById('spotify-login');
         const readerElement = document.getElementById('reader');
+
+        let accessToken = null;
         let html5QrCode = null;
 
+        // Authentication Flow
+        function initiateSpotifyLogin() {
+            const authUrl = new URL('https://accounts.spotify.com/authorize');
+            authUrl.searchParams.set('client_id', CLIENT_ID);
+            authUrl.searchParams.set('response_type', 'token');
+            authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+            authUrl.searchParams.set('scope', SCOPES);
+            authUrl.searchParams.set('show_dialog', 'true');
+            
+            window.location.href = authUrl.toString();
+        }
+
+        function extractSpotifyToken() {
+            const hash = window.location.hash
+                .substring(1)
+                .split('&')
+                .reduce((initial, item) => {
+                    if (item) {
+                        var parts = item.split('=');
+                        initial[parts[0]] = decodeURIComponent(parts[1]);
+                    }
+                    return initial;
+                }, {});
+            
+            window.location.hash = '';
+            return hash.access_token;
+        }
+
+        // Spotify API Calls
+        async function fetchUserDevices() {
+            const response = await fetch('https://api.spotify.com/v1/me/player/devices', {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            return await response.json();
+        }
+
+        async function startPlayback(trackUri) {
+            const devices = await fetchUserDevices();
+            if (devices.devices && devices.devices.length) {
+                const deviceId = devices.devices[0].id;
+                await fetch('https://api.spotify.com/v1/me/player/play', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        uris: [trackUri]
+                    })
+                });
+            }
+        }
+
+        // QR Code Scanner
         function startQRScanner() {
             Html5Qrcode.getCameras().then(cameras => {
                 if (cameras && cameras.length) {
-                    // Attempt to find back/environment camera
                     const backCamera = cameras.find(camera => 
                         camera.label.toLowerCase().includes('back') || 
                         camera.label.toLowerCase().includes('environment')
@@ -77,73 +179,65 @@
                     html5QrCode = new Html5Qrcode("reader");
                     html5QrCode.start(
                         cameraToUse, 
-                        { 
-                            fps: 10, 
-                            qrbox: Math.min(readerElement.clientWidth * 0.9, 350)
-                        },
+                        { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
                         onScanSuccess,
                         () => {} // Silent error handling
                     );
-
-                    statusElement.textContent = 'Scan Spotify QR Code';
-                } else {
-                    statusElement.textContent = 'No cameras found';
                 }
-            }).catch(err => {
-                statusElement.textContent = 'Camera error: ' + err.message;
-            });
-        }
-
-        function createMinimalPlayer(trackId) {
-            document.body.innerHTML = `
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #121212, #1DB954);">
-                    <div class="player-controls">
-                        <button id="play-pause" class="player-button">▶️</button>
-                        <button id="skip" class="player-button">⏩</button>
-                    </div>
-                    <iframe 
-                        id="spotify-player"
-                        src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0" 
-                        style="display: none;"
-                        allow="encrypted-media"
-                    ></iframe>
-                </div>
-            `;
-
-            const player = document.getElementById('spotify-player');
-            const playPauseBtn = document.getElementById('play-pause');
-            const skipBtn = document.getElementById('skip');
-
-            playPauseBtn.addEventListener('click', () => {
-                const isPlaying = playPauseBtn.textContent === '⏸️';
-                playPauseBtn.textContent = isPlaying ? '▶️' : '⏸️';
-                player.contentWindow.postMessage(isPlaying ? 'pause' : 'play', '*');
-            });
-
-            skipBtn.addEventListener('click', () => {
-                player.contentWindow.postMessage('seek+10', '*');
             });
         }
 
         function onScanSuccess(decodedText) {
-            // Spotify track detection
             const trackIdMatch = 
                 decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
                 decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
             
             if (trackIdMatch) {
                 const trackId = trackIdMatch[1];
+                const trackUri = `spotify:track:${trackId}`;
                 
-                // Stop scanning
                 html5QrCode.stop();
+                startPlayback(trackUri);
                 
-                // Create minimal player
-                createMinimalPlayer(trackId);
+                switchToPlayerScreen();
             }
         }
 
-        // Start scanner when page loads
-        startQRScanner();
+        // Screen Management
+        function switchToLoginScreen() {
+            loginScreen.style.display = 'flex';
+            scannerScreen.style.display = 'none';
+            playerScreen.style.display = 'none';
+        }
+
+        function switchToScannerScreen() {
+            loginScreen.style.display = 'none';
+            scannerScreen.style.display = 'flex';
+            playerScreen.style.display = 'none';
+            startQRScanner();
+        }
+
+        function switchToPlayerScreen() {
+            loginScreen.style.display = 'none';
+            scannerScreen.style.display = 'none';
+            playerScreen.style.display = 'flex';
+        }
+
+        // Event Listeners
+        spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
+
+        // Initialize
+        function init() {
+            const token = extractSpotifyToken();
+            if (token) {
+                accessToken = token;
+                switchToScannerScreen();
+            } else {
+                switchToLoginScreen();
+            }
+        }
+
+        init();
     </script>
 </body>
 </html>
