@@ -17,73 +17,72 @@
             color: white;
             overflow: hidden;
             text-align: center;
+            touch-action: manipulation;
         }
         #reader {
-            width: 100%;
-            max-width: 500px;
-            height: 400px;
+            width: 90vw;
+            height: 90vw;
+            max-width: 400px;
+            max-height: 400px;
             margin: 20px auto;
             border-radius: 15px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
         }
         #status {
-            padding: 20px;
-            font-size: 18px;
+            padding: 10px;
+            font-size: 16px;
         }
-        #camera-select {
+        .player-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .player-button {
             background-color: #1DB954;
             color: white;
             border: none;
-            padding: 10px 20px;
-            margin: 10px;
-            border-radius: 5px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 20px;
         }
     </style>
 </head>
 <body>
     <div id="status">Spotify QR Code Scanner</div>
-    <select id="camera-select" style="display:none;"></select>
     <div id="reader"></div>
 
     <script>
         const statusElement = document.getElementById('status');
         const readerElement = document.getElementById('reader');
-        const cameraSelect = document.getElementById('camera-select');
         let html5QrCode = null;
 
         function startQRScanner() {
-            // Get list of cameras
             Html5Qrcode.getCameras().then(cameras => {
                 if (cameras && cameras.length) {
-                    // Populate camera select dropdown
-                    cameraSelect.innerHTML = cameras.map((camera, index) => 
-                        `<option value="${camera.id}">Camera ${index + 1} (${camera.label})</option>`
-                    ).join('');
-                    
-                    // If multiple cameras, show selection
-                    if (cameras.length > 1) {
-                        cameraSelect.style.display = 'block';
-                    }
-
-                    // Attempt to find back/environment camera first
+                    // Attempt to find back/environment camera
                     const backCamera = cameras.find(camera => 
                         camera.label.toLowerCase().includes('back') || 
                         camera.label.toLowerCase().includes('environment')
                     );
 
-                    // Select camera to use
                     const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
 
-                    // Start QR code scanner
                     html5QrCode = new Html5Qrcode("reader");
                     html5QrCode.start(
                         cameraToUse, 
                         { 
                             fps: 10, 
-                            qrbox: Math.min(readerElement.clientWidth * 0.8, 250)
+                            qrbox: Math.min(readerElement.clientWidth * 0.9, 350)
                         },
                         onScanSuccess,
-                        onScanError
+                        () => {} // Silent error handling
                     );
 
                     statusElement.textContent = 'Scan Spotify QR Code';
@@ -92,7 +91,37 @@
                 }
             }).catch(err => {
                 statusElement.textContent = 'Camera error: ' + err.message;
-                console.error(err);
+            });
+        }
+
+        function createMinimalPlayer(trackId) {
+            document.body.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, #121212, #1DB954);">
+                    <div class="player-controls">
+                        <button id="play-pause" class="player-button">▶️</button>
+                        <button id="skip" class="player-button">⏩</button>
+                    </div>
+                    <iframe 
+                        id="spotify-player"
+                        src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0" 
+                        style="display: none;"
+                        allow="encrypted-media"
+                    ></iframe>
+                </div>
+            `;
+
+            const player = document.getElementById('spotify-player');
+            const playPauseBtn = document.getElementById('play-pause');
+            const skipBtn = document.getElementById('skip');
+
+            playPauseBtn.addEventListener('click', () => {
+                const isPlaying = playPauseBtn.textContent === '⏸️';
+                playPauseBtn.textContent = isPlaying ? '▶️' : '⏸️';
+                player.contentWindow.postMessage(isPlaying ? 'pause' : 'play', '*');
+            });
+
+            skipBtn.addEventListener('click', () => {
+                player.contentWindow.postMessage('seek+10', '*');
             });
         }
 
@@ -108,39 +137,10 @@
                 // Stop scanning
                 html5QrCode.stop();
                 
-                // Create fullscreen player
-                document.body.innerHTML = `
-                    <iframe 
-                        style="position:fixed;top:0;left:0;width:100%;height:100%;border:none;" 
-                        src="https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0" 
-                        allow="encrypted-media"
-                    ></iframe>
-                `;
+                // Create minimal player
+                createMinimalPlayer(trackId);
             }
         }
-
-        function onScanError(errorMessage) {
-            // Optional: Add some error logging or user feedback
-            console.log('Scan error:', errorMessage);
-        }
-
-        // Camera selection change handler
-        cameraSelect.addEventListener('change', (e) => {
-            if (html5QrCode) {
-                html5QrCode.stop();
-            }
-            
-            html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start(
-                e.target.value, 
-                { 
-                    fps: 10, 
-                    qrbox: Math.min(readerElement.clientWidth * 0.8, 250)
-                },
-                onScanSuccess,
-                onScanError
-            );
-        });
 
         // Start scanner when page loads
         startQRScanner();
