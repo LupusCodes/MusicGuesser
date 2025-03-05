@@ -187,6 +187,7 @@
         let randomSegmentStart = 0;
         let randomSegmentEnd = 0;
         let trackDuration = 0;
+        let positionCheckInterval = null;
 
         window.onSpotifyWebPlaybackSDKReady = () => {
             logDebug('Spotify Web Playback SDK is ready');
@@ -219,20 +220,15 @@
 
             spotifyPlayer.addListener('player_state_changed', state => {
                 if (state) {
-                    // Check if we're in random 10 seconds mode
-                    if (gameModeSelect.value === 'random10') {
-                        const currentPosition = state.position;
-                        
-                        // If we've passed the segment end, pause playback
-                        if (currentPosition >= randomSegmentEnd) {
-                            spotifyPlayer.pause();
-                            isPlaying = false;
-                            updatePlayPauseButton();
-                        }
-                    }
-
                     isPlaying = !state.paused;
                     updatePlayPauseButton();
+                    
+                    // Start position check interval when playing in random10 mode
+                    if (isPlaying && gameModeSelect.value === 'random10') {
+                        startPositionCheck();
+                    } else if (!isPlaying) {
+                        clearPositionCheckInterval();
+                    }
                 }
             });
 
@@ -255,6 +251,35 @@
                 logDebug(`Connection Error: ${error}`, true);
             });
         };
+        
+        function startPositionCheck() {
+            // Clear any existing interval
+            clearPositionCheckInterval();
+            
+            // Set a new interval to check position every 500ms
+            positionCheckInterval = setInterval(async () => {
+                try {
+                    // Get current state
+                    const state = await spotifyPlayer.getCurrentState();
+                    if (state && state.position >= randomSegmentEnd) {
+                        logDebug(`Position check: ${state.position}ms >= ${randomSegmentEnd}ms, pausing`);
+                        spotifyPlayer.pause();
+                        isPlaying = false;
+                        updatePlayPauseButton();
+                        clearPositionCheckInterval();
+                    }
+                } catch (error) {
+                    logDebug(`Position check error: ${error}`, true);
+                }
+            }, 500);
+        }
+        
+        function clearPositionCheckInterval() {
+            if (positionCheckInterval) {
+                clearInterval(positionCheckInterval);
+                positionCheckInterval = null;
+            }
+        }
 
         function updatePlayPauseButton() {
             playPauseBtn.textContent = isPlaying ? '⏸️' : '▶️';
@@ -277,6 +302,11 @@
             });
             
             screenElement.style.display = 'flex';
+            
+            // Clear position check interval when switching screens
+            if (screenElement !== playerScreen) {
+                clearPositionCheckInterval();
+            }
         }
 
         function startQRScanner() {
@@ -342,6 +372,7 @@
 
                 const trackData = await trackResponse.json();
                 trackDuration = trackData.duration_ms;
+                logDebug(`Track duration: ${trackDuration}ms`);
 
                 // Set random segment if in that mode
                 if (gameModeSelect.value === 'random10') {
@@ -349,6 +380,7 @@
                     const maxStartTime = Math.max(0, trackDuration - 10000);
                     randomSegmentStart = Math.floor(Math.random() * maxStartTime);
                     randomSegmentEnd = randomSegmentStart + 10000;
+                    logDebug(`Random segment: ${randomSegmentStart}ms to ${randomSegmentEnd}ms`);
                 }
 
                 // Transfer playback to our device
@@ -390,6 +422,11 @@
                     logDebug('Playback started successfully');
                     isPlaying = true;
                     updatePlayPauseButton();
+                    
+                    // Start position check for random10 mode
+                    if (gameModeSelect.value === 'random10') {
+                        startPositionCheck();
+                    }
                 }
             } catch (error) {
                 logDebug(`Playback Error: ${error}`, true);
@@ -401,6 +438,10 @@
                 // In random 10 seconds mode, replay the segment
                 if (gameModeSelect.value === 'random10') {
                     spotifyPlayer.seek(randomSegmentStart);
+                    if (!isPlaying) {
+                        spotifyPlayer.resume();
+                        startPositionCheck();
+                    }
                     return;
                 }
 
@@ -443,12 +484,21 @@
             logDebug('Play/Pause button clicked');
             
             // In random 10 seconds mode, if paused, seek to segment start and play
-            if (gameModeSelect.value === 'random10') {
-                if (!isPlaying) {
+            if (gameModeSelect.value === 'random10' && !isPlaying) {
                 spotifyPlayer.seek(randomSegmentStart);
                 spotifyPlayer.resume();
+                logDebug('Restarting segment at ' + randomSegmentStart + 'ms');
+                startPositionCheck();
+            } else {
+                // Normal toggle play behavior
+                if (isPlaying) {
+                    spotifyPlayer.pause();
+                    clearPositionCheckInterval();
                 } else {
-                spotifyPlayer.pause();
+                    spotifyPlayer.resume();
+                    if (gameModeSelect.value === 'random10') {
+                        startPositionCheck();
+                    }
                 }
             }
         });
@@ -458,7 +508,25 @@
         });
         returnToScannerBtn.addEventListener('click', () => {
             logDebug('Return to Scanner button clicked');
+            
+            // Stop playback before returning to scanner
+            if (spotifyPlayer && isPlaying) {
+                spotifyPlayer.pause();
+                isPlaying = false;
+            }
+            
+            clearPositionCheckInterval();
             startQRScanner();
+        });
+
+        // Add listener for game mode changes
+        gameModeSelect.addEventListener('change', () => {
+            logDebug(`Game mode changed to: ${gameModeSelect.value}`);
+            
+            // If we're currently playing a track, restart with the new mode
+            if (currentTrackUri && spotifyPlayer) {
+                startPlayback(currentTrackUri);
+            }
         });
 
         // Initialize
@@ -493,6 +561,14 @@
                 switchToScreen(loginScreen);
             }
         }
+
+        // Clean up when leaving the page
+        window.addEventListener('beforeunload', () => {
+            clearPositionCheckInterval();
+            if (html5QrCode) {
+                html5QrCode.stop().catch(() => {});
+            }
+        });
 
         // Run initialization
         init();
