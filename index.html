@@ -106,9 +106,7 @@
             cursor: pointer;
         }
         #current-track-info {
-            margin-top: 10px;
-            font-size: 14px;
-            display: none;
+            display: none;  /* Hide the track info element completely */
         }
         .app-title {
             font-size: 24px;
@@ -117,6 +115,10 @@
         .scanner-status {
             margin-bottom: 15px;
             font-weight: bold;
+        }
+        .playback-status {
+            font-size: 18px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -139,6 +141,7 @@
 
     <div id="player-screen" class="screen">
         <div id="current-track-info">Ready to play...</div>
+        <div class="playback-status">Now Playing</div>
         <div class="player-controls">
             <button id="play-pause" class="player-button">▶️</button>
             <button id="seek-forward" class="player-button">⏩</button>
@@ -228,9 +231,9 @@
                     if (state.track_window && state.track_window.current_track) {
                         const track = state.track_window.current_track;
                         currentTrackName = track.name;
-                        const artists = track.artists.map(a => a.name).join(', ');
-                        trackInfoElement.textContent = `${track.name} - ${artists}`;
-                        trackInfoElement.style.display = 'block';
+                        
+                        // We still store the track information but don't display it
+                        // The stored information may be useful for other features
                     }
                     
                     if (isPlaying && gameModeSelect.value === 'random10') {
@@ -457,11 +460,9 @@
                 const trackData = await trackResponse.json();
                 trackDuration = trackData.duration_ms;
                 currentTrackName = trackData.name;
-                const artistNames = trackData.artists.map(a => a.name).join(', ');
                 
-                trackInfoElement.textContent = `${trackData.name} - ${artistNames}`;
-                trackInfoElement.style.display = 'block';
-
+                // We still store the track information but don't display it anymore
+                
                 // Set random segment if in that mode
                 if (gameModeSelect.value === 'random10') {
                     // Make sure we don't start too close to the end
