@@ -189,6 +189,7 @@
         let playerReady = false;
         let scannerInitialized = false;
         let gameModeSwitched = false;
+        let scannerStopping = false;
 
         window.onSpotifyWebPlaybackSDKReady = () => {
             if (!accessToken) return;
@@ -229,6 +230,7 @@
                         currentTrackName = track.name;
                         const artists = track.artists.map(a => a.name).join(', ');
                         trackInfoElement.textContent = `${track.name} - ${artists}`;
+                        trackInfoElement.style.display = 'block';
                     }
                     
                     if (isPlaying && gameModeSelect.value === 'random10') {
@@ -326,10 +328,23 @@
         }
 
         function startQRScanner() {
+            // If the scanner is already initialized, don't initialize it again
+            if (scannerInitialized) {
+                switchToScreen(scannerScreen);
+                return;
+            }
+            
+            // If we're still stopping a previous scanner, wait a bit
+            if (scannerStopping) {
+                setTimeout(startQRScanner, 500);
+                return;
+            }
+            
             switchToScreen(scannerScreen);
             
             // Clear content before starting new scanner
             readerElement.innerHTML = '';
+            statusElement.textContent = "Initializing camera...";
             
             // Create a fresh scanner instance
             html5QrCode = new Html5Qrcode("reader");
@@ -363,6 +378,7 @@
                     }).catch(err => {
                         console.error(`Camera Start Error: ${err}`);
                         statusElement.textContent = "Camera error. Please try again.";
+                        scannerInitialized = false;
                         
                         // Try to recover
                         setTimeout(() => {
@@ -372,11 +388,32 @@
                 } else {
                     statusElement.textContent = "No cameras found";
                     console.error('No cameras found');
+                    scannerInitialized = false;
                 }
             }).catch(error => {
                 statusElement.textContent = "Camera access error";
                 console.error(`Camera Detection Error: ${error}`);
+                scannerInitialized = false;
             });
+        }
+
+        async function stopQRScanner() {
+            if (!html5QrCode || !scannerInitialized) {
+                return Promise.resolve();
+            }
+            
+            scannerStopping = true;
+            
+            try {
+                await html5QrCode.stop();
+                console.log("QR Scanner stopped successfully");
+            } catch (err) {
+                console.error(`Error stopping QR scanner: ${err}`);
+            } finally {
+                scannerInitialized = false;
+                scannerStopping = false;
+                html5QrCode = null;  // Clear the instance
+            }
         }
 
         function onScanSuccess(decodedText) {
@@ -388,18 +425,7 @@
                 const trackId = trackIdMatch[1];
                 currentTrackUri = `spotify:track:${trackId}`;
                 
-                html5QrCode.stop().then(() => {
-                    scannerInitialized = false;
-                    
-                    if (playerReady) {
-                        startPlayback(currentTrackUri);
-                    }
-                    
-                    switchToScreen(playerScreen);
-                }).catch(err => {
-                    console.error(`Error stopping QR scanner: ${err}`);
-                    scannerInitialized = false;
-                    
+                stopQRScanner().then(() => {
                     if (playerReady) {
                         startPlayback(currentTrackUri);
                     }
@@ -434,6 +460,7 @@
                 const artistNames = trackData.artists.map(a => a.name).join(', ');
                 
                 trackInfoElement.textContent = `${trackData.name} - ${artistNames}`;
+                trackInfoElement.style.display = 'block';
 
                 // Set random segment if in that mode
                 if (gameModeSelect.value === 'random10') {
@@ -639,32 +666,26 @@
         playPauseBtn.addEventListener('click', togglePlayPause);
         seekForwardBtn.addEventListener('click', seekForward);
         
-        returnToScannerBtn.addEventListener('click', () => {
+        returnToScannerBtn.addEventListener('click', async () => {
             // Stop playback before returning to scanner
             if (spotifyPlayer && isPlaying) {
-                spotifyPlayer.pause().catch(err => {
+                try {
+                    await spotifyPlayer.pause();
+                } catch (err) {
                     console.error(`Error pausing player: ${err}`);
-                });
+                }
                 isPlaying = false;
             }
             
-            // Reset scanner state completely
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    scannerInitialized = false;
-                    readerElement.innerHTML = '';
-                    setTimeout(startQRScanner, 300);
-                }).catch(() => {
-                    scannerInitialized = false;
-                    readerElement.innerHTML = '';
-                    setTimeout(startQRScanner, 300);
-                });
-            } else {
-                startQRScanner();
-            }
-            
             clearPositionCheckInterval();
+            
+            // First completely stop the scanner
+            await stopQRScanner();
+            
+            // Then wait a moment before starting a new one
+            setTimeout(() => {
+                startQRScanner();
+            }, 500);
         });
 
         // Add listener for game mode changes - don't auto-play songs when changing mode
@@ -709,9 +730,7 @@
         // Clean up when leaving the page
         window.addEventListener('beforeunload', () => {
             clearPositionCheckInterval();
-            if (html5QrCode) {
-                html5QrCode.stop().catch(() => {});
-            }
+            stopQRScanner();
         });
 
         // Run initialization
