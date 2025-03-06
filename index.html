@@ -144,11 +144,11 @@
         <div id="current-track-info">Ready to play...</div>
         <div class="playback-status">Now Playing</div>
         <div class="player-controls">
-    <button id="play-pause" class="player-button">▶️</button>
-    <button id="seek-forward" class="player-button">⏩</button>
-    <button id="increase-duration" class="player-button" style="display: none;">+</button>
-</div>
-<div id="snippet-duration" style="margin-top: 10px; font-size: 16px; display: none;"></div>
+            <button id="play-pause" class="player-button">▶️</button>
+            <button id="seek-forward" class="player-button">⏩</button>
+            <button id="increase-duration" class="player-button" style="display: none;">+</button>
+        </div>
+        <div id="snippet-duration" style="margin-top: 10px; font-size: 16px; display: none;"></div>
         <button id="return-to-scanner" class="secondary-button">Scan New Song</button>
     </div>
 
@@ -180,6 +180,8 @@
         const playPauseBtn = document.getElementById('play-pause');
         const seekForwardBtn = document.getElementById('seek-forward');
         const returnToScannerBtn = document.getElementById('return-to-scanner');
+        const increaseDurationBtn = document.getElementById('increase-duration');
+        const snippetDurationElement = document.getElementById('snippet-duration');
 
         let accessToken = null;
         let html5QrCode = null;
@@ -198,9 +200,7 @@
         let scannerStopping = false;
 
         let progressiveDurations = [1000, 2000, 5000, 10000, 20000, 30000, 60000]; // durations in milliseconds
-let currentDurationIndex = 0;
-let snippetDurationElement = document.getElementById('snippet-duration');
-let increaseDurationBtn = document.getElementById('increase-duration');
+        let currentDurationIndex = 0;
 
         window.onSpotifyWebPlaybackSDKReady = () => {
             if (!accessToken) return;
@@ -244,7 +244,7 @@ let increaseDurationBtn = document.getElementById('increase-duration');
                         // The stored information may be useful for other features
                     }
                     
-                    if (isPlaying && gameModeSelect.value === 'random10') {
+                    if (isPlaying && (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive')) {
                         startPositionCheck();
                     } else if (!isPlaying) {
                         clearPositionCheckInterval();
@@ -280,104 +280,29 @@ let increaseDurationBtn = document.getElementById('increase-duration');
         }
         
         function startPositionCheck() {
-    clearPositionCheckInterval();
-    
-    positionCheckInterval = setInterval(async () => {
-        try {
-            if (!spotifyPlayer) {
-                clearPositionCheckInterval();
-                return;
-            }
+            clearPositionCheckInterval();
             
-            const state = await spotifyPlayer.getCurrentState();
-            if (!state) return;
-            
-            if (state.position >= randomSegmentEnd) {
-                spotifyPlayer.pause();
-                isPlaying = false;
-                updatePlayPauseButton();
-                clearPositionCheckInterval();
-            }
-        } catch (error) {
-            console.error(`Position check error: ${error}`);
+            positionCheckInterval = setInterval(async () => {
+                try {
+                    if (!spotifyPlayer) {
+                        clearPositionCheckInterval();
+                        return;
+                    }
+                    
+                    const state = await spotifyPlayer.getCurrentState();
+                    if (!state) return;
+                    
+                    if (state.position >= randomSegmentEnd) {
+                        spotifyPlayer.pause();
+                        isPlaying = false;
+                        updatePlayPauseButton();
+                        clearPositionCheckInterval();
+                    }
+                } catch (error) {
+                    console.error(`Position check error: ${error}`);
+                }
+            }, 500);
         }
-    }, 500);
-}
-Update the togglePlayPause function to handle progressive mode:
-
-javascript
-
-Copy
-// Find the section in togglePlayPause that refers to random10 mode (around line 450) and update it:
-// Replace this:
-// In random 10 seconds mode, if paused, seek to segment start
-if (gameModeSelect.value === 'random10') {
-    await spotifyPlayer.seek(randomSegmentStart);
-}
-
-await spotifyPlayer.resume();
-
-if (gameModeSelect.value === 'random10') {
-    startPositionCheck();
-}
-
-// With this:
-// In timed modes, if paused, seek to segment start
-if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
-    await spotifyPlayer.seek(randomSegmentStart);
-}
-
-await spotifyPlayer.resume();
-
-if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
-    startPositionCheck();
-}
-Update the seekForward function:
-
-javascript
-
-Copy
-// Find the section in seekForward related to random10 mode (around line 481) and update it:
-// Replace this:
-// In random 10 seconds mode, replay the segment
-if (gameModeSelect.value === 'random10') {
-    await spotifyPlayer.seek(randomSegmentStart);
-    
-    if (!isPlaying) {
-        await spotifyPlayer.resume();
-        isPlaying = true;
-        updatePlayPauseButton();
-        startPositionCheck();
-    }
-    return;
-}
-
-// With this:
-// In timed modes, replay the segment
-if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
-    await spotifyPlayer.seek(randomSegmentStart);
-    
-    if (!isPlaying) {
-        await spotifyPlayer.resume();
-        isPlaying = true;
-        updatePlayPauseButton();
-        startPositionCheck();
-    }
-    return;
-}
-Finally, add event listener for the increase duration button:
-
-javascript
-
-Copy
-// Add this with the other event listeners (around line 575):
-increaseDurationBtn.addEventListener('click', increaseDuration);
-
-// Also update the game mode listener to handle switching away from progressive mode:
-gameModeSelect.addEventListener('change', () => {
-    gameModeSwitched = true; // Set flag to prevent autoplay
-    
-
         
         function clearPositionCheckInterval() {
             if (positionCheckInterval) {
@@ -528,7 +453,6 @@ gameModeSelect.addEventListener('change', () => {
                     return;
                 }
                 
-                
                 // First, get track information
                 const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${trackUri.split(':')[2]}`, {
                     headers: {
@@ -549,30 +473,30 @@ gameModeSelect.addEventListener('change', () => {
                 
                 // Set random segment if in that mode
                 if (gameModeSelect.value === 'random10') {
-    // Make sure we don't start too close to the end
-    const maxStartTime = Math.max(0, trackDuration - 10000);
-    randomSegmentStart = Math.floor(Math.random() * maxStartTime);
-    randomSegmentEnd = randomSegmentStart + 10000;
-} else if (gameModeSelect.value === 'progressive') {
-    // Reset to first duration
-    currentDurationIndex = 0;
-    
-    // Make sure we don't start too close to the end
-    const maxStartTime = Math.max(0, trackDuration - progressiveDurations[progressiveDurations.length - 1]);
-    randomSegmentStart = Math.floor(Math.random() * maxStartTime);
-    randomSegmentEnd = randomSegmentStart + progressiveDurations[currentDurationIndex];
-    
-    // Show the UI elements
-    snippetDurationElement.style.display = 'block';
-    increaseDurationBtn.style.display = 'flex';
-    
-    // Update the UI
-    updateProgressiveMode();
-} else {
-    // For full song mode, hide the progressive mode UI
-    snippetDurationElement.style.display = 'none';
-    increaseDurationBtn.style.display = 'none';
-}
+                    // Make sure we don't start too close to the end
+                    const maxStartTime = Math.max(0, trackDuration - 10000);
+                    randomSegmentStart = Math.floor(Math.random() * maxStartTime);
+                    randomSegmentEnd = randomSegmentStart + 10000;
+                } else if (gameModeSelect.value === 'progressive') {
+                    // Reset to first duration
+                    currentDurationIndex = 0;
+                    
+                    // Make sure we don't start too close to the end
+                    const maxStartTime = Math.max(0, trackDuration - progressiveDurations[progressiveDurations.length - 1]);
+                    randomSegmentStart = Math.floor(Math.random() * maxStartTime);
+                    randomSegmentEnd = randomSegmentStart + progressiveDurations[currentDurationIndex];
+                    
+                    // Show the UI elements
+                    snippetDurationElement.style.display = 'block';
+                    increaseDurationBtn.style.display = 'flex';
+                    
+                    // Update the UI
+                    updateProgressiveMode();
+                } else {
+                    // For full song mode, hide the progressive mode UI
+                    snippetDurationElement.style.display = 'none';
+                    increaseDurationBtn.style.display = 'none';
+                }
 
                 // First, make sure we're the active device
                 await fetch('https://api.spotify.com/v1/me/player', {
@@ -592,16 +516,16 @@ gameModeSelect.addEventListener('change', () => {
                 
                 // Now play the track
                 const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-    method: 'PUT',
-    headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-        uris: [trackUri],
-        position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
-    })
-});
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        uris: [trackUri],
+                        position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
+                    })
+                });
 
                 if (!response.ok && response.status !== 204) {
                     try {
@@ -614,8 +538,8 @@ gameModeSelect.addEventListener('change', () => {
                     isPlaying = true;
                     updatePlayPauseButton();
                     
-                    // Start position check for random10 mode
-                    if (gameModeSelect.value === 'random10') {
+                    // Start position check for timed modes
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
                         startPositionCheck();
                     }
                 }
@@ -632,7 +556,7 @@ gameModeSelect.addEventListener('change', () => {
                         },
                         body: JSON.stringify({
                             uris: [trackUri],
-                            position_ms: gameModeSelect.value === 'random10' ? randomSegmentStart : 0
+                            position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
                         })
                     });
                 } catch (fallbackError) {
@@ -641,13 +565,32 @@ gameModeSelect.addEventListener('change', () => {
             }
         }
 
-       
         function increaseDuration() {
-    if (currentDurationIndex < progressiveDurations.length - 1) {
-        currentDurationIndex++;
-        updateProgressiveMode();
-    }
-}
+            if (currentDurationIndex < progressiveDurations.length - 1) {
+                currentDurationIndex++;
+                updateProgressiveMode();
+            }
+        }
+
+        function updateProgressiveMode() {
+            const duration = progressiveDurations[currentDurationIndex];
+            randomSegmentEnd = randomSegmentStart + duration;
+            snippetDurationElement.textContent = `Current snippet: ${duration / 1000} seconds`;
+            
+            // If already playing, restart with new duration
+            if (isPlaying) {
+                spotifyPlayer.pause().then(() => {
+                    setTimeout(() => {
+                        spotifyPlayer.seek(randomSegmentStart).then(() => {
+                            spotifyPlayer.resume().then(() => {
+                                startPositionCheck();
+                            });
+                        });
+                    }, 300);
+                });
+            }
+        }
+
         async function togglePlayPause() {
             if (!spotifyPlayer) {
                 return;
@@ -658,17 +601,16 @@ gameModeSelect.addEventListener('change', () => {
                     await spotifyPlayer.pause();
                     clearPositionCheckInterval();
                 } else {
-                    // In random 10 seconds mode, if paused, seek to segment start
                     // In timed modes, if paused, seek to segment start
-if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
-    await spotifyPlayer.seek(randomSegmentStart);
-}
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                        await spotifyPlayer.seek(randomSegmentStart);
+                    }
 
-await spotifyPlayer.resume();
+                    await spotifyPlayer.resume();
 
-if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
-    startPositionCheck();
-}
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                        startPositionCheck();
+                    }
                 }
             } catch (error) {
                 console.error(`Toggle play/pause error: ${error}`);
@@ -691,8 +633,8 @@ if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive
                         updatePlayPauseButton();
                         
                         if (isPlaying && (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive')) {
-    startPositionCheck();
-} else if (!isPlaying) {
+                            startPositionCheck();
+                        } else if (!isPlaying) {
                             clearPositionCheckInterval();
                         }
                     }
@@ -709,17 +651,17 @@ if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive
             
             try {
                 // In timed modes, replay the segment
-if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
-    await spotifyPlayer.seek(randomSegmentStart);
-    
-    if (!isPlaying) {
-        await spotifyPlayer.resume();
-        isPlaying = true;
-        updatePlayPauseButton();
-        startPositionCheck();
-    }
-    return;
-}
+                if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                    await spotifyPlayer.seek(randomSegmentStart);
+                    
+                    if (!isPlaying) {
+                        await spotifyPlayer.resume();
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                        startPositionCheck();
+                    }
+                    return;
+                }
 
                 // For full song mode, seek 10 seconds forward
                 const state = await spotifyPlayer.getCurrentState();
@@ -753,7 +695,7 @@ if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive
                     
                     // Calculate new position
                     let newPosition;
-                    if (gameModeSelect.value === 'random10') {
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
                         newPosition = randomSegmentStart;
                     } else {
                         newPosition = Math.min(trackDuration, currentPosition + 10000);
@@ -772,29 +714,12 @@ if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive
             }
         }
 
-        function updateProgressiveMode() {
-    const duration = progressiveDurations[currentDurationIndex];
-    snippetDurationElement.textContent = `Current snippet: ${duration / 1000} seconds`;
-    
-    // If already playing, restart with new duration
-    if (isPlaying) {
-        spotifyPlayer.pause().then(() => {
-            setTimeout(() => {
-                spotifyPlayer.seek(randomSegmentStart).then(() => {
-                    spotifyPlayer.resume().then(() => {
-                        startPositionCheck();
-                    });
-                });
-            }, 300);
-        });
-    }
-}
-
         // Event Listeners
         spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
         
         playPauseBtn.addEventListener('click', togglePlayPause);
         seekForwardBtn.addEventListener('click', seekForward);
+        increaseDurationBtn.addEventListener('click', increaseDuration);
         
         returnToScannerBtn.addEventListener('click', async () => {
             // Stop playback before returning to scanner
@@ -821,20 +746,13 @@ if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive
         // Add listener for game mode changes - don't auto-play songs when changing mode
         gameModeSelect.addEventListener('change', () => {
             gameModeSwitched = true; // Set flag to prevent autoplay
+            
+            // Hide progressive UI if not in progressive mode
+            if (gameModeSelect.value !== 'progressive') {
+                snippetDurationElement.style.display = 'none';
+                increaseDurationBtn.style.display = 'none';
+            }
         });
-
-    increaseDurationBtn.addEventListener('click', increaseDuration);
-
-// Also update the game mode listener to handle switching away from progressive mode:
-gameModeSelect.addEventListener('change', () => {
-    gameModeSwitched = true; // Set flag to prevent autoplay
-    
-    // Hide progressive UI if not in progressive mode
-    if (gameModeSelect.value !== 'progressive') {
-        snippetDurationElement.style.display = 'none';
-        increaseDurationBtn.style.display = 'none';
-    }
-});
 
         // Initialize
         function init() {
