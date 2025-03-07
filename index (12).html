@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify QR Scanner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, #121212, #1DB954);
+            color: white;
+            overflow: hidden;
+            text-align: center;
+            touch-action: manipulation;
+        }
+        .screen {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            padding: 20px;
+        }
+        #login-screen {
+            display: flex;
+        }
+        #reader {
+            width: 80vw;
+            height: 80vw;
+            max-width: 400px;
+            max-height: 400px;
+            margin: 20px auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            aspect-ratio: 1/1;
+            overflow: hidden;
+        }
+        .spotify-button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 20px 0;
+            transition: background-color 0.3s;
+        }
+        .spotify-button:hover {
+            background-color: #16a349;
+        }
+        .player-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .player-button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 20px;
+            transition: transform 0.2s, background-color 0.3s;
+        }
+        .player-button:hover {
+            background-color: #16a349;
+            transform: scale(1.05);
+        }
+        .secondary-button {
+            background-color: #535353;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        .secondary-button:hover {
+            background-color: #6e6e6e;
+        }
+        .game-mode-select {
+            background-color: #535353;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        #current-track-info {
+            display: none;  /* Hide the track info element completely */
+        }
+        .app-title {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .scanner-status {
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .playback-status {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="login-screen" class="screen">
+        <h2 class="app-title">Spotify QR Scanner</h2>
+        <p>Click below to connect your Spotify account</p>
+        <button id="spotify-login" class="spotify-button">Connect Spotify</button>
+        <p id="error-message" style="color: red;"></p>
+    </div>
+
+    <div id="scanner-screen" class="screen">
+        <select id="game-mode" class="game-mode-select">
+            <option value="full">Full Song</option>
+            <option value="random10">Random 10 Seconds</option>
+            <option value="progressive">Progressive Mode</option>
+        </select>
+        <div id="status" class="scanner-status">Scan a Spotify QR Code</div>
+        <div id="reader"></div>
+    </div>
+
+    <div id="player-screen" class="screen">
+        <div id="current-track-info">Ready to play...</div>
+        <div class="playback-status">Now Playing</div>
+        <div class="player-controls">
+            <button id="play-pause" class="player-button">▶️</button>
+            <button id="seek-forward" class="player-button">⏩</button>
+            <button id="increase-duration" class="player-button" style="display: none;">+</button>
+        </div>
+        <div id="snippet-duration" style="margin-top: 10px; font-size: 16px; display: none;"></div>
+        <button id="return-to-scanner" class="secondary-button">Scan New Song</button>
+    </div>
+
+    <script>
+        // IMPORTANT: Replace with YOUR Spotify Client ID
+        const CLIENT_ID = '1325a171deaa4a0d91bf676e43c8485c';
+        
+        // IMPORTANT: This MUST match exactly what you set in Spotify Developer Dashboard
+        const REDIRECT_URI = window.location.origin + window.location.pathname;
+        
+        const SCOPES = [
+            'user-read-playback-state', 
+            'user-modify-playback-state', 
+            'user-read-currently-playing',
+            'streaming'
+        ].join(' ');
+
+        // Screen elements
+        const loginScreen = document.getElementById('login-screen');
+        const scannerScreen = document.getElementById('scanner-screen');
+        const playerScreen = document.getElementById('player-screen');
+        const spotifyLoginBtn = document.getElementById('spotify-login');
+        const readerElement = document.getElementById('reader');
+        const statusElement = document.getElementById('status');
+        const gameModeSelect = document.getElementById('game-mode');
+        const trackInfoElement = document.getElementById('current-track-info');
+
+        // Buttons
+        const playPauseBtn = document.getElementById('play-pause');
+        const seekForwardBtn = document.getElementById('seek-forward');
+        const returnToScannerBtn = document.getElementById('return-to-scanner');
+        const increaseDurationBtn = document.getElementById('increase-duration');
+        const snippetDurationElement = document.getElementById('snippet-duration');
+
+        let accessToken = null;
+        let html5QrCode = null;
+        let currentTrackUri = null;
+        let currentTrackName = '';
+        let spotifyPlayer = null;
+        let deviceId = null;
+        let isPlaying = false;
+        let randomSegmentStart = 0;
+        let randomSegmentEnd = 0;
+        let trackDuration = 0;
+        let positionCheckInterval = null;
+        let playerReady = false;
+        let scannerInitialized = false;
+        let gameModeSwitched = false;
+        let scannerStopping = false;
+
+        let progressiveDurations = [1000, 2000, 5000, 10000, 20000, 30000, 60000]; // durations in milliseconds
+        let currentDurationIndex = 0;
+
+        window.onSpotifyWebPlaybackSDKReady = () => {
+            if (!accessToken) return;
+            initializeSpotifyPlayer();
+        };
+        
+        function initializeSpotifyPlayer() {
+            spotifyPlayer = new Spotify.Player({
+                name: 'Spotify QR Scanner',
+                getOAuthToken: cb => { cb(accessToken); },
+                volume: 0.5
+            });
+
+            // Error handling
+            spotifyPlayer.addListener('initialization_error', ({ message }) => {
+                console.error(`Initialization Error: ${message}`);
+            });
+            
+            spotifyPlayer.addListener('authentication_error', ({ message }) => {
+                console.error(`Authentication Error: ${message}`);
+            });
+            
+            spotifyPlayer.addListener('account_error', ({ message }) => {
+                console.error(`Account Error: ${message}`);
+            });
+            
+            spotifyPlayer.addListener('playback_error', ({ message }) => {
+                console.error(`Playback Error: ${message}`);
+            });
+
+            spotifyPlayer.addListener('player_state_changed', state => {
+                if (state) {
+                    isPlaying = !state.paused;
+                    updatePlayPauseButton();
+                    
+                    if (state.track_window && state.track_window.current_track) {
+                        const track = state.track_window.current_track;
+                        currentTrackName = track.name;
+                        
+                        // We still store the track information but don't display it
+                        // The stored information may be useful for other features
+                    }
+                    
+                    if (isPlaying && (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive')) {
+                        startPositionCheck();
+                    } else if (!isPlaying) {
+                        clearPositionCheckInterval();
+                    }
+                }
+            });
+
+            spotifyPlayer.addListener('ready', ({ device_id }) => {
+                deviceId = device_id;
+                playerReady = true;
+                
+                if (currentTrackUri && !gameModeSwitched) {
+                    startPlayback(currentTrackUri);
+                }
+                
+                // Reset the flag
+                if (gameModeSwitched) {
+                    gameModeSwitched = false;
+                }
+            });
+
+            spotifyPlayer.addListener('not_ready', ({ device_id }) => {
+                playerReady = false;
+            });
+
+            spotifyPlayer.connect().then(success => {
+                if (!success) {
+                    console.error('Spotify Player Connection Failed');
+                }
+            }).catch(error => {
+                console.error(`Connection Error: ${error}`);
+            });
+        }
+        
+        function startPositionCheck() {
+            clearPositionCheckInterval();
+            
+            positionCheckInterval = setInterval(async () => {
+                try {
+                    if (!spotifyPlayer) {
+                        clearPositionCheckInterval();
+                        return;
+                    }
+                    
+                    const state = await spotifyPlayer.getCurrentState();
+                    if (!state) return;
+                    
+                    if (state.position >= randomSegmentEnd) {
+                        spotifyPlayer.pause();
+                        isPlaying = false;
+                        updatePlayPauseButton();
+                        clearPositionCheckInterval();
+                    }
+                } catch (error) {
+                    console.error(`Position check error: ${error}`);
+                }
+            }, 500);
+        }
+        
+        function clearPositionCheckInterval() {
+            if (positionCheckInterval) {
+                clearInterval(positionCheckInterval);
+                positionCheckInterval = null;
+            }
+        }
+
+        function updatePlayPauseButton() {
+            playPauseBtn.textContent = isPlaying ? '⏸️' : '▶️';
+        }
+
+        function initiateSpotifyLogin() {
+            const authUrl = new URL('https://accounts.spotify.com/authorize');
+            authUrl.searchParams.set('client_id', CLIENT_ID);
+            authUrl.searchParams.set('response_type', 'token');
+            authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+            authUrl.searchParams.set('scope', SCOPES);
+            authUrl.searchParams.set('show_dialog', 'true');
+            
+            window.location.href = authUrl.toString();
+        }
+
+        function switchToScreen(screenElement) {
+            [loginScreen, scannerScreen, playerScreen].forEach(screen => {
+                screen.style.display = 'none';
+            });
+            
+            screenElement.style.display = 'flex';
+            
+            if (screenElement !== playerScreen) {
+                clearPositionCheckInterval();
+            }
+        }
+
+        function startQRScanner() {
+            // If the scanner is already initialized, don't initialize it again
+            if (scannerInitialized) {
+                switchToScreen(scannerScreen);
+                return;
+            }
+            
+            // If we're still stopping a previous scanner, wait a bit
+            if (scannerStopping) {
+                setTimeout(startQRScanner, 500);
+                return;
+            }
+            
+            switchToScreen(scannerScreen);
+            
+            // Clear content before starting new scanner
+            readerElement.innerHTML = '';
+            statusElement.textContent = "Initializing camera...";
+            
+            // Create a fresh scanner instance
+            html5QrCode = new Html5Qrcode("reader");
+            
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length) {
+                    const backCamera = cameras.find(camera => 
+                        camera.label.toLowerCase().includes('back') || 
+                        camera.label.toLowerCase().includes('environment')
+                    );
+
+                    const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
+                    
+                    // Start the camera with appropriate configuration
+                    html5QrCode.start(
+                        cameraToUse, 
+                        { 
+                            fps: 10, 
+                            qrbox: Math.min(readerElement.clientWidth * 0.9, 350) 
+                        },
+                        onScanSuccess,
+                        (error) => {
+                            // Don't log every frame error
+                            if (error !== "QR code parse error, error = QR code not found.") {
+                                console.error(`QR Scanner Error: ${error}`);
+                            }
+                        }
+                    ).then(() => {
+                        scannerInitialized = true;
+                        statusElement.textContent = "Ready to scan Spotify code";
+                    }).catch(err => {
+                        console.error(`Camera Start Error: ${err}`);
+                        statusElement.textContent = "Camera error. Please try again.";
+                        scannerInitialized = false;
+                        
+                        // Try to recover
+                        setTimeout(() => {
+                            startQRScanner();
+                        }, 1000);
+                    });
+                } else {
+                    statusElement.textContent = "No cameras found";
+                    console.error('No cameras found');
+                    scannerInitialized = false;
+                }
+            }).catch(error => {
+                statusElement.textContent = "Camera access error";
+                console.error(`Camera Detection Error: ${error}`);
+                scannerInitialized = false;
+            });
+        }
+
+        async function stopQRScanner() {
+            if (!html5QrCode || !scannerInitialized) {
+                return Promise.resolve();
+            }
+            
+            scannerStopping = true;
+            
+            try {
+                await html5QrCode.stop();
+                console.log("QR Scanner stopped successfully");
+            } catch (err) {
+                console.error(`Error stopping QR scanner: ${err}`);
+            } finally {
+                scannerInitialized = false;
+                scannerStopping = false;
+                html5QrCode = null;  // Clear the instance
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            const trackIdMatch = 
+                decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
+                decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+            
+            if (trackIdMatch) {
+                const trackId = trackIdMatch[1];
+                currentTrackUri = `spotify:track:${trackId}`;
+                
+                stopQRScanner().then(() => {
+                    if (playerReady) {
+                        startPlayback(currentTrackUri);
+                    }
+                    
+                    switchToScreen(playerScreen);
+                });
+            }
+        }
+
+        async function startPlayback(trackUri) {
+            try {
+                if (!deviceId) {
+                    console.error('No device ID available yet');
+                    return;
+                }
+                
+                // First, get track information
+                const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${trackUri.split(':')[2]}`, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (!trackResponse.ok) {
+                    console.error(`Error getting track: ${trackResponse.status}`);
+                    return;
+                }
+
+                const trackData = await trackResponse.json();
+                trackDuration = trackData.duration_ms;
+                currentTrackName = trackData.name;
+                
+                // We still store the track information but don't display it anymore
+                
+                // Set random segment if in that mode
+                if (gameModeSelect.value === 'random10') {
+                    // Make sure we don't start too close to the end
+                    const maxStartTime = Math.max(0, trackDuration - 10000);
+                    randomSegmentStart = Math.floor(Math.random() * maxStartTime);
+                    randomSegmentEnd = randomSegmentStart + 10000;
+                } else if (gameModeSelect.value === 'progressive') {
+                    // Reset to first duration
+                    currentDurationIndex = 0;
+                    
+                    // Make sure we don't start too close to the end
+                    const maxStartTime = Math.max(0, trackDuration - progressiveDurations[progressiveDurations.length - 1]);
+                    randomSegmentStart = Math.floor(Math.random() * maxStartTime);
+                    randomSegmentEnd = randomSegmentStart + progressiveDurations[currentDurationIndex];
+                    
+                    // Show the UI elements
+                    snippetDurationElement.style.display = 'block';
+                    increaseDurationBtn.style.display = 'flex';
+                    
+                    // Update the UI
+                    updateProgressiveMode();
+                } else {
+                    // For full song mode, hide the progressive mode UI
+                    snippetDurationElement.style.display = 'none';
+                    increaseDurationBtn.style.display = 'none';
+                }
+
+                // First, make sure we're the active device
+                await fetch('https://api.spotify.com/v1/me/player', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        device_ids: [deviceId],
+                        play: false  // Don't start playing yet
+                    })
+                });
+
+                // Wait for device transfer
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Now play the track
+                const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        uris: [trackUri],
+                        position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
+                    })
+                });
+
+                if (!response.ok && response.status !== 204) {
+                    try {
+                        // Try alternative method - using player SDK directly
+                        spotifyPlayer.resume();
+                    } catch (e) {
+                        console.error(`Playback Error: ${e}`);
+                    }
+                } else {
+                    isPlaying = true;
+                    updatePlayPauseButton();
+                    
+                    // Start position check for timed modes
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                        startPositionCheck();
+                    }
+                }
+            } catch (error) {
+                console.error(`Playback Error: ${error}`);
+                
+                // Try fallback method
+                try {
+                    await fetch(`https://api.spotify.com/v1/me/player/play`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            uris: [trackUri],
+                            position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
+                        })
+                    });
+                } catch (fallbackError) {
+                    console.error(`Fallback playback error: ${fallbackError}`);
+                }
+            }
+        }
+
+        function increaseDuration() {
+            if (currentDurationIndex < progressiveDurations.length - 1) {
+                currentDurationIndex++;
+                updateProgressiveMode();
+            }
+        }
+
+        function updateProgressiveMode() {
+            const duration = progressiveDurations[currentDurationIndex];
+            randomSegmentEnd = randomSegmentStart + duration;
+            snippetDurationElement.textContent = `Current snippet: ${duration / 1000} seconds`;
+            
+            // If already playing, restart with new duration
+            if (isPlaying) {
+                spotifyPlayer.pause().then(() => {
+                    setTimeout(() => {
+                        spotifyPlayer.seek(randomSegmentStart).then(() => {
+                            spotifyPlayer.resume().then(() => {
+                                startPositionCheck();
+                            });
+                        });
+                    }, 300);
+                });
+            }
+        }
+
+        async function togglePlayPause() {
+            if (!spotifyPlayer) {
+                return;
+            }
+            
+            try {
+                if (isPlaying) {
+                    await spotifyPlayer.pause();
+                    clearPositionCheckInterval();
+                } else {
+                    // In timed modes, if paused, seek to segment start
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                        await spotifyPlayer.seek(randomSegmentStart);
+                    }
+
+                    await spotifyPlayer.resume();
+
+                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                        startPositionCheck();
+                    }
+                }
+            } catch (error) {
+                console.error(`Toggle play/pause error: ${error}`);
+                
+                // Try API fallback for play/pause
+                try {
+                    const endpoint = isPlaying ? 
+                        'https://api.spotify.com/v1/me/player/pause' : 
+                        'https://api.spotify.com/v1/me/player/play';
+                    
+                    const response = await fetch(endpoint, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                    
+                    if (response.ok || response.status === 204) {
+                        isPlaying = !isPlaying;
+                        updatePlayPauseButton();
+                        
+                        if (isPlaying && (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive')) {
+                            startPositionCheck();
+                        } else if (!isPlaying) {
+                            clearPositionCheckInterval();
+                        }
+                    }
+                } catch (apiError) {
+                    console.error(`API play/pause fallback error: ${apiError}`);
+                }
+            }
+        }
+
+        async function seekForward() {
+            if (!spotifyPlayer) {
+                return;
+            }
+            
+            try {
+                const state = await spotifyPlayer.getCurrentState();
+                if (!state) {
+                    return;
+                }
+                
+                const currentPosition = state.position;
+                
+                // Updated behavior for progressive mode
+                if (gameModeSelect.value === 'progressive') {
+                    // Skip forward 10 seconds, but don't exceed segment end
+                    const newPosition = Math.min(randomSegmentEnd, currentPosition + 10000);
+                    await spotifyPlayer.seek(newPosition);
+                    
+                    if (!isPlaying) {
+                        await spotifyPlayer.resume();
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                        startPositionCheck();
+                    }
+                    return;
+                }
+                
+                // In random10 mode, replay the segment
+                else if (gameModeSelect.value === 'random10') {
+                    await spotifyPlayer.seek(randomSegmentStart);
+                    
+                    if (!isPlaying) {
+                        await spotifyPlayer.resume();
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                        startPositionCheck();
+                    }
+                    return;
+                }
+
+                // For full song mode, seek 10 seconds forward
+                const newPosition = Math.min(trackDuration, currentPosition + 10000);
+                await spotifyPlayer.seek(newPosition);
+                
+            } catch (error) {
+                console.error(`Seek error: ${error}`);
+                
+                // Try API fallback for seeking
+                try {
+                    // Get current position first
+                    const response = await fetch('https://api.spotify.com/v1/me/player', {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    const state = await response.json();
+                    const currentPosition = state.progress_ms || 0;
+                    
+                    // Calculate new position based on mode
+                    let newPosition;
+                    if (gameModeSelect.value === 'progressive') {
+                        // For progressive mode, skip 10 seconds but stay within segment
+                        newPosition = Math.min(randomSegmentEnd, currentPosition + 10000);
+                    } else if (gameModeSelect.value === 'random10') {
+                        // For random10 mode, go back to segment start
+                        newPosition = randomSegmentStart;
+                    } else {
+                        // For full song mode, skip 10 seconds
+                        newPosition = Math.min(trackDuration, currentPosition + 10000);
+                    }
+
+                    // Perform seek
+                    await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPosition}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                } catch (apiError) {
+                    console.error(`API seek fallback error: ${apiError}`);
+                }
+            }
+        }
+
+        // Event Listeners
+        spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
+        
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        seekForwardBtn.addEventListener('click', seekForward);
+        increaseDurationBtn.addEventListener('click', increaseDuration);
+        
+        returnToScannerBtn.addEventListener('click', async () => {
+            // Stop playback before returning to scanner
+            if (spotifyPlayer && isPlaying) {
+                try {
+                    await spotifyPlayer.pause();
+                } catch (err) {
+                    console.error(`Error pausing player: ${err}`);
+                }
+                isPlaying = false;
+            }
+            
+            clearPositionCheckInterval();
+            
+            // First completely stop the scanner
+            await stopQRScanner();
+            
+            // Then wait a moment before starting a new one
+            setTimeout(() => {
+                startQRScanner();
+            }, 500);
+        });
+
+        // Add listener for game mode changes - don't auto-play songs when changing mode
+        gameModeSelect.addEventListener('change', () => {
+            gameModeSwitched = true; // Set flag to prevent autoplay
+            
+            // Hide progressive UI if not in progressive mode
+            if (gameModeSelect.value !== 'progressive') {
+                snippetDurationElement.style.display = 'none';
+                increaseDurationBtn.style.display = 'none';
+            }
+        });
+
+        // Initialize
+        function init() {
+            // Check for access token in URL hash
+            const hash = window.location.hash
+                .substring(1)
+                .split('&')
+                .reduce((initial, item) => {
+                    if (item) {
+                        var parts = item.split('=');
+                        initial[parts[0]] = decodeURIComponent(parts[1]);
+                    }
+                    return initial;
+                }, {});
+            
+            if (hash.access_token) {
+                // Store and use access token
+                accessToken = hash.access_token;
+                
+                // Clear hash from URL
+                window.location.hash = '';
+                
+                // Initialize Spotify player if SDK is ready
+                if (window.Spotify) {
+                    initializeSpotifyPlayer();
+                }
+                
+                // Start QR scanner
+                startQRScanner();
+            } else {
+                // Show login screen if no token
+                switchToScreen(loginScreen);
+            }
+        }
+
+        // Clean up when leaving the page
+        window.addEventListener('beforeunload', () => {
+            clearPositionCheckInterval();
+            stopQRScanner();
+        });
+
+        // Run initialization
+        init();
+    </script>
+</body>
+</html>
