@@ -650,8 +650,30 @@
             }
             
             try {
-                // In timed modes, replay the segment
-                if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                const state = await spotifyPlayer.getCurrentState();
+                if (!state) {
+                    return;
+                }
+                
+                const currentPosition = state.position;
+                
+                // Updated behavior for progressive mode
+                if (gameModeSelect.value === 'progressive') {
+                    // Skip forward 10 seconds, but don't exceed segment end
+                    const newPosition = Math.min(randomSegmentEnd, currentPosition + 10000);
+                    await spotifyPlayer.seek(newPosition);
+                    
+                    if (!isPlaying) {
+                        await spotifyPlayer.resume();
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                        startPositionCheck();
+                    }
+                    return;
+                }
+                
+                // In random10 mode, replay the segment
+                else if (gameModeSelect.value === 'random10') {
                     await spotifyPlayer.seek(randomSegmentStart);
                     
                     if (!isPlaying) {
@@ -664,14 +686,7 @@
                 }
 
                 // For full song mode, seek 10 seconds forward
-                const state = await spotifyPlayer.getCurrentState();
-                if (!state) {
-                    return;
-                }
-                
-                const currentPosition = state.position;
                 const newPosition = Math.min(trackDuration, currentPosition + 10000);
-                
                 await spotifyPlayer.seek(newPosition);
                 
             } catch (error) {
@@ -693,11 +708,16 @@
                     const state = await response.json();
                     const currentPosition = state.progress_ms || 0;
                     
-                    // Calculate new position
+                    // Calculate new position based on mode
                     let newPosition;
-                    if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+                    if (gameModeSelect.value === 'progressive') {
+                        // For progressive mode, skip 10 seconds but stay within segment
+                        newPosition = Math.min(randomSegmentEnd, currentPosition + 10000);
+                    } else if (gameModeSelect.value === 'random10') {
+                        // For random10 mode, go back to segment start
                         newPosition = randomSegmentStart;
                     } else {
+                        // For full song mode, skip 10 seconds
                         newPosition = Math.min(trackDuration, currentPosition + 10000);
                     }
 
