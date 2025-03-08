@@ -253,7 +253,7 @@
       <button id="next-playlist-track" class="secondary-button" style="display: none;">Next Song</button>
       <button id="return-to-scanner" class="secondary-button">Scan New Song</button>
     </div>
-    <div id="track-info-display" style="display: none; margin-top: 20px; text-align: left; padding: 15px; background: rgba(0, 0, 0, 0.2); border-radius: 10px;">
+    <div id="track-info-display" style="display: none; margin-top: 20px; text-align: left; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px;">
       <p id="track-name-display"><strong>🎵 Song:</strong> <span></span></p>
       <p id="track-artist-display"><strong>👤 Artist:</strong> <span></span></p>
       <p id="track-album-display"><strong>💿 Album:</strong> <span></span></p>
@@ -269,13 +269,14 @@
   <script>
     // IMPORTANT: Replace with YOUR Spotify Client ID
     const CLIENT_ID = '1325a171deaa4a0d91bf676e43c8485c';
-    // IMPORTANT: This MUST match exactly what you set in Spotify Developer Dashboard
+    // Updated SCOPES (added playlist-read-private)
     const REDIRECT_URI = window.location.origin + window.location.pathname;
     const SCOPES = [
       'user-read-playback-state', 
       'user-modify-playback-state', 
       'user-read-currently-playing',
-      'streaming'
+      'streaming',
+      'playlist-read-private'
     ].join(' ');
 
     // Screen elements
@@ -454,7 +455,7 @@
       }
     }
 
-    // Updated playlist URL parsing to support Spotify's own playlist links
+    // Updated regex to support Spotify's own playlist links
     function getPlaylistIdFromUrl(url) {
       const regex = /(?:spotify:playlist:|https?:\/\/open\.spotify\.com\/playlist\/)([a-zA-Z0-9]+)/;
       const match = url.match(regex);
@@ -970,7 +971,7 @@
       }
     });
 
-    // Stop the camera when switching to playlist mode
+    // Stop camera when switching to playlist mode
     switchToPlaylistBtn.addEventListener('click', async () => {
       await stopQRScanner();
       switchToScreen(playlistInputScreen);
