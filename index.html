@@ -533,8 +533,23 @@
       }
     }
 
+    // Adjust the players scoreboard layout based on the number of players
     function generatePlayersUI() {
       playersScoreboard.innerHTML = '';
+      if (players.length <= 3) {
+        // Center players with flex layout
+        playersScoreboard.style.display = 'flex';
+        playersScoreboard.style.flexDirection = 'row';
+        playersScoreboard.style.justifyContent = 'center';
+        playersScoreboard.style.alignItems = 'center';
+        playersScoreboard.style.flexWrap = 'wrap';
+        playersScoreboard.style.gap = '20px';
+      } else {
+        // Use a grid with two columns
+        playersScoreboard.style.display = 'grid';
+        playersScoreboard.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        playersScoreboard.style.gap = '20px';
+      }
       players.forEach((player, index) => {
         const playerDiv = document.createElement('div');
         playerDiv.className = 'player-scoreboard-item';
