@@ -106,7 +106,7 @@
       cursor: pointer;
     }
     #current-track-info {
-      display: none;  /* Hide the track info element completely */
+      display: none;
     }
     .app-title {
       font-size: 24px;
@@ -115,10 +115,6 @@
     .scanner-status {
       margin-bottom: 15px;
       font-weight: bold;
-    }
-    .playback-status {
-      font-size: 18px;
-      margin-bottom: 20px;
     }
     .input-container {
       margin-bottom: 15px;
@@ -204,6 +200,11 @@
       font-size: 14px;
       font-weight: bold;
     }
+    /* Adjust playlist screen for PC aspect ratio */
+    #playlist-input-screen {
+      max-width: 600px;
+      margin: auto;
+    }
   </style>
 </head>
 <body>
@@ -241,7 +242,6 @@
 
   <div id="player-screen" class="screen">
     <div id="current-track-info">Ready to play...</div>
-    <div class="playback-status">Now Playing</div>
     <div class="player-controls">
       <button id="play-pause" class="player-button">▶️</button>
       <button id="seek-forward" class="player-button">⏩</button>
@@ -326,7 +326,7 @@
     let scannerInitialized = false;
     let gameModeSwitched = false;
     let scannerStopping = false;
-    let progressiveDurations = [1000, 2000, 5000, 10000, 20000, 30000, 60000]; // durations in milliseconds
+    let progressiveDurations = [1000, 2000, 5000, 10000, 20000, 30000, 60000];
     let currentDurationIndex = 0;
     let playlistTracks = [];
     let playedTrackIndices = [];
@@ -348,7 +348,6 @@
         volume: 0.5
       });
 
-      // Error handling
       spotifyPlayer.addListener('initialization_error', ({ message }) => {
         console.error(`Initialization Error: ${message}`);
       });
@@ -455,17 +454,16 @@
       }
     }
 
-    // Handle playlist URL parsing
+    // Updated playlist URL parsing to support Spotify's own playlist links
     function getPlaylistIdFromUrl(url) {
-      const regex = /spotify:playlist:([a-zA-Z0-9]+)|open\.spotify\.com\/playlist\/([a-zA-Z0-9]+)/;
+      const regex = /(?:spotify:playlist:|https?:\/\/open\.spotify\.com\/playlist\/)([a-zA-Z0-9]+)/;
       const match = url.match(regex);
       if (match) {
-        return match[1] || match[2];
+        return match[1];
       }
       return null;
     }
 
-    // Fetch playlist tracks
     async function fetchPlaylistTracks(playlistId) {
       try {
         let allTracks = [];
@@ -501,7 +499,6 @@
       }
     }
 
-    // Get a random unplayed track
     function getRandomUnplayedTrack() {
       if (playlistTracks.length === 0) {
         return null;
@@ -519,7 +516,6 @@
       return playlistTracks[randomIndex];
     }
 
-    // Play a track from the playlist
     async function playRandomPlaylistTrack() {
       const track = getRandomUnplayedTrack();
       if (!track) {
@@ -536,14 +532,12 @@
       }
     }
 
-    // Generate players UI for playlist mode
     function generatePlayersUI() {
       playersScoreboard.innerHTML = '';
       players.forEach((player, index) => {
         const playerDiv = document.createElement('div');
         playerDiv.className = 'player-scoreboard-item';
 
-        // Player name input
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'player-name-input';
@@ -552,7 +546,6 @@
         nameInput.addEventListener('input', (e) => {
           players[index].name = e.target.value;
         });
-        // Score controls
         const scoreControls = document.createElement('div');
         scoreControls.className = 'score-controls';
 
@@ -579,7 +572,6 @@
         scoreControls.appendChild(coinDisplay);
         scoreControls.appendChild(plusBtn);
 
-        // Year tiles container
         const yearTilesContainer = document.createElement('div');
         yearTilesContainer.className = 'year-tiles-container';
         player.years.forEach(year => {
@@ -595,7 +587,6 @@
       });
     }
 
-    // Reveal track info and allow player guess selection
     function revealTrackInfo() {
       trackInfoDisplay.style.display = 'block';
       revealTrackBtn.disabled = true;
@@ -798,7 +789,6 @@
           console.error(`Fallback playback error: ${fallbackError}`);
         }
       }
-      // Update the track info fields (hidden until reveal)
       try {
         const trackId = trackUri.split(':')[2];
         const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
@@ -980,6 +970,12 @@
       }
     });
 
+    // Stop the camera when switching to playlist mode
+    switchToPlaylistBtn.addEventListener('click', async () => {
+      await stopQRScanner();
+      switchToScreen(playlistInputScreen);
+    });
+
     startPlaylistGameBtn.addEventListener('click', async () => {
       const playlistUrl = playlistUrlInput.value.trim();
       const playlistId = getPlaylistIdFromUrl(playlistUrl);
@@ -1015,10 +1011,6 @@
       playRandomPlaylistTrack();
       startPlaylistGameBtn.textContent = "Start Game";
       startPlaylistGameBtn.disabled = false;
-    });
-
-    switchToPlaylistBtn.addEventListener('click', () => {
-      switchToScreen(playlistInputScreen);
     });
 
     returnToScannerFromPlaylistBtn.addEventListener('click', () => {
