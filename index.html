@@ -4,13 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spotify QR Scanner</title>
-  <!-- Load QR Code library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
-  <!-- Load Spotify Web Playback SDK -->
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Arial', sans-serif;
       margin: 0;
       padding: 0;
       height: 100vh;
@@ -30,8 +28,9 @@
       height: 100%;
       padding: 20px;
     }
-    /* Login, scanner & player screens */
-    #login-screen { display: flex; }
+    #login-screen {
+      display: flex;
+    }
     #reader {
       width: 80vw;
       height: 80vw;
@@ -39,7 +38,7 @@
       max-height: 400px;
       margin: 20px auto;
       border-radius: 15px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
       aspect-ratio: 1/1;
       overflow: hidden;
     }
@@ -54,19 +53,9 @@
       margin: 20px 0;
       transition: background-color 0.3s;
     }
-    .spotify-button:hover { background-color: #16a349; }
-    .secondary-button {
-      background-color: #535353;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 10px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-top: 10px;
-      transition: background-color 0.3s;
+    .spotify-button:hover {
+      background-color: #16a349;
     }
-    .secondary-button:hover { background-color: #6e6e6e; }
     .player-controls {
       display: flex;
       justify-content: center;
@@ -92,18 +81,44 @@
       background-color: #16a349;
       transform: scale(1.05);
     }
-    .scanner-status { margin-bottom: 15px; font-weight: bold; }
-    .playback-status { font-size: 18px; margin-bottom: 20px; }
-    .app-title { font-size: 24px; margin-bottom: 10px; }
-
-    /* Playlist Mode screen styles */
-    #playlist-input-screen {
-      display: none;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100%;
-      padding: 20px;
+    .secondary-button {
+      background-color: #535353;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background-color 0.3s;
+    }
+    .secondary-button:hover {
+      background-color: #6e6e6e;
+    }
+    .game-mode-select {
+      background-color: #535353;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      cursor: pointer;
+    }
+    #current-track-info {
+      display: none;  /* Hide the track info element completely */
+    }
+    .app-title {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    .scanner-status {
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+    .playback-status {
+      font-size: 18px;
+      margin-bottom: 20px;
     }
     .input-container {
       margin-bottom: 15px;
@@ -120,10 +135,78 @@
       font-size: 16px;
       margin-top: 5px;
     }
+    .game-control-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 20px;
+      width: 100%;
+      max-width: 300px;
+    }
+    .player-scoreboard-item {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      width: 100%;
+    }
+    .player-name-input {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      padding: 8px;
+      border-radius: 5px;
+      color: white;
+      margin-right: 10px;
+      width: 150px;
+    }
+    .score-controls {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .coin-display {
+      background: #FFD700;
+      color: #000;
+      font-weight: bold;
+      padding: 5px 10px;
+      border-radius: 50px;
+      margin: 0 10px;
+      min-width: 30px;
+      text-align: center;
+    }
+    .score-button {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #1DB954;
+      color: white;
+      border: none;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .year-tiles-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 10px;
+      min-height: 40px;
+    }
+    .year-tile {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 60px;
+      height: 30px;
+      background: #1DB954;
+      color: white;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <!-- Login Screen -->
   <div id="login-screen" class="screen">
     <h2 class="app-title">Spotify QR Scanner</h2>
     <p>Click below to connect your Spotify account</p>
@@ -131,9 +214,8 @@
     <p id="error-message" style="color: red;"></p>
   </div>
 
-  <!-- Scanner Screen (for QR code scanning) -->
   <div id="scanner-screen" class="screen">
-    <select id="game-mode" class="spotify-input" style="max-width: 200px;">
+    <select id="game-mode" class="game-mode-select">
       <option value="full">Full Song</option>
       <option value="random10">Random 10 Seconds</option>
       <option value="progressive">Progressive Mode</option>
@@ -143,18 +225,20 @@
     <button id="switch-to-playlist" class="secondary-button" style="margin-top: 20px;">Use Playlist Mode</button>
   </div>
 
-  <!-- Playlist Input Screen -->
   <div id="playlist-input-screen" class="screen">
     <h2 class="app-title">Playlist Mode</h2>
     <div class="input-container">
       <label for="playlist-url">Spotify Playlist URL:</label>
       <input type="text" id="playlist-url" class="spotify-input" placeholder="https://open.spotify.com/playlist/..." />
     </div>
-    <button id="start-playlist" class="spotify-button">Start Playlist</button>
-    <button id="back-to-scanner" class="secondary-button">Back to Scanner</button>
+    <div class="input-container">
+      <label for="player-count">Number of Players:</label>
+      <input type="number" id="player-count" class="spotify-input" min="1" max="10" value="2" />
+    </div>
+    <button id="start-playlist-game" class="spotify-button">Start Game</button>
+    <button id="return-to-scanner-from-playlist" class="secondary-button">Back to Scanner</button>
   </div>
 
-  <!-- Player Screen -->
   <div id="player-screen" class="screen">
     <div id="current-track-info">Ready to play...</div>
     <div class="playback-status">Now Playing</div>
@@ -164,22 +248,69 @@
       <button id="increase-duration" class="player-button" style="display: none;">+</button>
     </div>
     <div id="snippet-duration" style="margin-top: 10px; font-size: 16px; display: none;"></div>
-    <button id="return-to-scanner" class="secondary-button">Scan New Song</button>
+    <div class="game-control-buttons">
+      <button id="reveal-track" class="secondary-button">🎵 Reveal Song</button>
+      <button id="next-playlist-track" class="secondary-button" style="display: none;">Next Song</button>
+      <button id="return-to-scanner" class="secondary-button">Scan New Song</button>
+    </div>
+    <div id="track-info-display" style="display: none; margin-top: 20px; text-align: left; padding: 15px; background: rgba(0, 0, 0, 0.2); border-radius: 10px;">
+      <p id="track-name-display"><strong>🎵 Song:</strong> <span></span></p>
+      <p id="track-artist-display"><strong>👤 Artist:</strong> <span></span></p>
+      <p id="track-album-display"><strong>💿 Album:</strong> <span></span></p>
+      <p id="track-year-display"><strong>📅 Release Year:</strong> <span></span></p>
+      <div id="guessed-correctly-section" style="margin-top: 15px; text-align: center;">
+        <p>Who guessed correctly?</p>
+        <div id="guessed-correctly-buttons"></div>
+      </div>
+    </div>
+    <div id="players-scoreboard" style="display: none; margin-top: 20px;"></div>
   </div>
 
   <script>
     // IMPORTANT: Replace with YOUR Spotify Client ID
     const CLIENT_ID = '1325a171deaa4a0d91bf676e43c8485c';
-    // Must match your Spotify Developer Dashboard settings
+    // IMPORTANT: This MUST match exactly what you set in Spotify Developer Dashboard
     const REDIRECT_URI = window.location.origin + window.location.pathname;
     const SCOPES = [
-      'user-read-playback-state',
-      'user-modify-playback-state',
+      'user-read-playback-state', 
+      'user-modify-playback-state', 
       'user-read-currently-playing',
       'streaming'
     ].join(' ');
 
-    // Global variables for both modes
+    // Screen elements
+    const loginScreen = document.getElementById('login-screen');
+    const scannerScreen = document.getElementById('scanner-screen');
+    const playerScreen = document.getElementById('player-screen');
+    const playlistInputScreen = document.getElementById('playlist-input-screen');
+    const spotifyLoginBtn = document.getElementById('spotify-login');
+    const readerElement = document.getElementById('reader');
+    const statusElement = document.getElementById('status');
+    const gameModeSelect = document.getElementById('game-mode');
+    const trackInfoElement = document.getElementById('current-track-info');
+    const playlistUrlInput = document.getElementById('playlist-url');
+    const playerCountInput = document.getElementById('player-count');
+    const startPlaylistGameBtn = document.getElementById('start-playlist-game');
+    const returnToScannerFromPlaylistBtn = document.getElementById('return-to-scanner-from-playlist');
+    const switchToPlaylistBtn = document.getElementById('switch-to-playlist');
+    const revealTrackBtn = document.getElementById('reveal-track');
+    const nextPlaylistTrackBtn = document.getElementById('next-playlist-track');
+    const trackInfoDisplay = document.getElementById('track-info-display');
+    const trackNameDisplay = document.getElementById('track-name-display').querySelector('span');
+    const trackArtistDisplay = document.getElementById('track-artist-display').querySelector('span');
+    const trackAlbumDisplay = document.getElementById('track-album-display').querySelector('span');
+    const trackYearDisplay = document.getElementById('track-year-display').querySelector('span');
+    const guessedCorrectlySection = document.getElementById('guessed-correctly-section');
+    const guessedCorrectlyButtons = document.getElementById('guessed-correctly-buttons');
+    const playersScoreboard = document.getElementById('players-scoreboard');
+
+    // Buttons
+    const playPauseBtn = document.getElementById('play-pause');
+    const seekForwardBtn = document.getElementById('seek-forward');
+    const returnToScannerBtn = document.getElementById('return-to-scanner');
+    const increaseDurationBtn = document.getElementById('increase-duration');
+    const snippetDurationElement = document.getElementById('snippet-duration');
+
     let accessToken = null;
     let html5QrCode = null;
     let currentTrackUri = null;
@@ -195,38 +326,16 @@
     let scannerInitialized = false;
     let gameModeSwitched = false;
     let scannerStopping = false;
-    let progressiveDurations = [1000,2000,5000,10000,20000,30000,60000];
+    let progressiveDurations = [1000, 2000, 5000, 10000, 20000, 30000, 60000]; // durations in milliseconds
     let currentDurationIndex = 0;
-
-    // Variables for playlist mode
     let playlistTracks = [];
+    let playedTrackIndices = [];
+    let currentPlaylistIndex = null;
+    let playerCount = 2;
+    let players = [];
+    let currentTrackYear = null;
     let isPlaylistMode = false;
 
-    // Screen elements
-    const loginScreen = document.getElementById('login-screen');
-    const scannerScreen = document.getElementById('scanner-screen');
-    const playlistInputScreen = document.getElementById('playlist-input-screen');
-    const playerScreen = document.getElementById('player-screen');
-    const spotifyLoginBtn = document.getElementById('spotify-login');
-    const readerElement = document.getElementById('reader');
-    const statusElement = document.getElementById('status');
-    const gameModeSelect = document.getElementById('game-mode');
-    const trackInfoElement = document.getElementById('current-track-info');
-    const returnToScannerBtn = document.getElementById('return-to-scanner');
-    const increaseDurationBtn = document.getElementById('increase-duration');
-    const snippetDurationElement = document.getElementById('snippet-duration');
-
-    // Playlist screen elements
-    const switchToPlaylistBtn = document.getElementById('switch-to-playlist');
-    const backToScannerBtn = document.getElementById('back-to-scanner');
-    const startPlaylistBtn = document.getElementById('start-playlist');
-    const playlistUrlInput = document.getElementById('playlist-url');
-
-    // Player control buttons
-    const playPauseBtn = document.getElementById('play-pause');
-    const seekForwardBtn = document.getElementById('seek-forward');
-
-    // Spotify SDK callback – using the same as your pre‑playlist file
     window.onSpotifyWebPlaybackSDKReady = () => {
       if (!accessToken) return;
       initializeSpotifyPlayer();
@@ -239,6 +348,7 @@
         volume: 0.5
       });
 
+      // Error handling
       spotifyPlayer.addListener('initialization_error', ({ message }) => {
         console.error(`Initialization Error: ${message}`);
       });
@@ -251,12 +361,14 @@
       spotifyPlayer.addListener('playback_error', ({ message }) => {
         console.error(`Playback Error: ${message}`);
       });
+
       spotifyPlayer.addListener('player_state_changed', state => {
         if (state) {
           isPlaying = !state.paused;
           updatePlayPauseButton();
           if (state.track_window && state.track_window.current_track) {
-            currentTrackName = state.track_window.current_track.name;
+            const track = state.track_window.current_track;
+            currentTrackName = track.name;
           }
           if (isPlaying && (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive')) {
             startPositionCheck();
@@ -265,19 +377,26 @@
           }
         }
       });
+
       spotifyPlayer.addListener('ready', ({ device_id }) => {
         deviceId = device_id;
         playerReady = true;
         if (currentTrackUri && !gameModeSwitched) {
           startPlayback(currentTrackUri);
         }
-        if (gameModeSwitched) { gameModeSwitched = false; }
+        if (gameModeSwitched) {
+          gameModeSwitched = false;
+        }
       });
+
       spotifyPlayer.addListener('not_ready', ({ device_id }) => {
         playerReady = false;
       });
+
       spotifyPlayer.connect().then(success => {
-        if (!success) { console.error('Spotify Player Connection Failed'); }
+        if (!success) {
+          console.error('Spotify Player Connection Failed');
+        }
       }).catch(error => {
         console.error(`Connection Error: ${error}`);
       });
@@ -287,7 +406,10 @@
       clearPositionCheckInterval();
       positionCheckInterval = setInterval(async () => {
         try {
-          if (!spotifyPlayer) { clearPositionCheckInterval(); return; }
+          if (!spotifyPlayer) {
+            clearPositionCheckInterval();
+            return;
+          }
           const state = await spotifyPlayer.getCurrentState();
           if (!state) return;
           if (state.position >= randomSegmentEnd) {
@@ -303,7 +425,10 @@
     }
 
     function clearPositionCheckInterval() {
-      if (positionCheckInterval) { clearInterval(positionCheckInterval); positionCheckInterval = null; }
+      if (positionCheckInterval) {
+        clearInterval(positionCheckInterval);
+        positionCheckInterval = null;
+      }
     }
 
     function updatePlayPauseButton() {
@@ -321,27 +446,214 @@
     }
 
     function switchToScreen(screenElement) {
-      [loginScreen, scannerScreen, playlistInputScreen, playerScreen].forEach(screen => {
+      [loginScreen, scannerScreen, playerScreen, playlistInputScreen].forEach(screen => {
         screen.style.display = 'none';
       });
       screenElement.style.display = 'flex';
-      if (screenElement !== playerScreen) { clearPositionCheckInterval(); }
+      if (screenElement !== playerScreen) {
+        clearPositionCheckInterval();
+      }
+    }
+
+    // Handle playlist URL parsing
+    function getPlaylistIdFromUrl(url) {
+      const regex = /spotify:playlist:([a-zA-Z0-9]+)|open\.spotify\.com\/playlist\/([a-zA-Z0-9]+)/;
+      const match = url.match(regex);
+      if (match) {
+        return match[1] || match[2];
+      }
+      return null;
+    }
+
+    // Fetch playlist tracks
+    async function fetchPlaylistTracks(playlistId) {
+      try {
+        let allTracks = [];
+        let offset = 0;
+        let hasMoreTracks = true;
+        while (hasMoreTracks) {
+          const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+          if (!response.ok) {
+            throw new Error(`Error fetching playlist: ${response.status}`);
+          }
+          const data = await response.json();
+          const tracks = data.items
+            .filter(item => item.track && !item.track.is_local)
+            .map(item => ({
+              uri: item.track.uri,
+              name: item.track.name,
+              artist: item.track.artists.map(artist => artist.name).join(', '),
+              album: item.track.album.name,
+              albumReleaseDate: item.track.album.release_date
+            }));
+          allTracks = [...allTracks, ...tracks];
+          offset += data.items.length;
+          hasMoreTracks = data.next !== null && data.items.length > 0;
+        }
+        return allTracks;
+      } catch (error) {
+        console.error(`Error fetching playlist tracks: ${error}`);
+        return [];
+      }
+    }
+
+    // Get a random unplayed track
+    function getRandomUnplayedTrack() {
+      if (playlistTracks.length === 0) {
+        return null;
+      }
+      if (playedTrackIndices.length === playlistTracks.length) {
+        alert("All songs have been played! Restarting playlist.");
+        playedTrackIndices = [];
+      }
+      let randomIndex;
+      do {
+        randomIndex = Math.floor(Math.random() * playlistTracks.length);
+      } while (playedTrackIndices.includes(randomIndex));
+      playedTrackIndices.push(randomIndex);
+      currentPlaylistIndex = randomIndex;
+      return playlistTracks[randomIndex];
+    }
+
+    // Play a track from the playlist
+    async function playRandomPlaylistTrack() {
+      const track = getRandomUnplayedTrack();
+      if (!track) {
+        console.error("No tracks available to play");
+        return;
+      }
+      trackInfoDisplay.style.display = 'none';
+      currentTrackUri = track.uri;
+      currentTrackName = track.name;
+      const releaseDateParts = track.albumReleaseDate.split('-');
+      currentTrackYear = releaseDateParts[0];
+      if (playerReady) {
+        await startPlayback(currentTrackUri);
+      }
+    }
+
+    // Generate players UI for playlist mode
+    function generatePlayersUI() {
+      playersScoreboard.innerHTML = '';
+      players.forEach((player, index) => {
+        const playerDiv = document.createElement('div');
+        playerDiv.className = 'player-scoreboard-item';
+
+        // Player name input
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'player-name-input';
+        nameInput.value = player.name;
+        nameInput.placeholder = `Player ${index + 1}`;
+        nameInput.addEventListener('input', (e) => {
+          players[index].name = e.target.value;
+        });
+        // Score controls
+        const scoreControls = document.createElement('div');
+        scoreControls.className = 'score-controls';
+
+        const minusBtn = document.createElement('button');
+        minusBtn.className = 'score-button';
+        minusBtn.textContent = '-';
+        minusBtn.addEventListener('click', () => {
+          if (players[index].coins > 0) {
+            players[index].coins--;
+            coinDisplay.textContent = players[index].coins;
+          }
+        });
+        const coinDisplay = document.createElement('div');
+        coinDisplay.className = 'coin-display';
+        coinDisplay.textContent = player.coins;
+        const plusBtn = document.createElement('button');
+        plusBtn.className = 'score-button';
+        plusBtn.textContent = '+';
+        plusBtn.addEventListener('click', () => {
+          players[index].coins++;
+          coinDisplay.textContent = players[index].coins;
+        });
+        scoreControls.appendChild(minusBtn);
+        scoreControls.appendChild(coinDisplay);
+        scoreControls.appendChild(plusBtn);
+
+        // Year tiles container
+        const yearTilesContainer = document.createElement('div');
+        yearTilesContainer.className = 'year-tiles-container';
+        player.years.forEach(year => {
+          const yearTile = document.createElement('div');
+          yearTile.className = 'year-tile';
+          yearTile.textContent = year;
+          yearTilesContainer.appendChild(yearTile);
+        });
+        playerDiv.appendChild(nameInput);
+        playerDiv.appendChild(scoreControls);
+        playerDiv.appendChild(yearTilesContainer);
+        playersScoreboard.appendChild(playerDiv);
+      });
+    }
+
+    // Reveal track info and allow player guess selection
+    function revealTrackInfo() {
+      trackInfoDisplay.style.display = 'block';
+      revealTrackBtn.disabled = true;
+      if (isPlaylistMode) {
+        nextPlaylistTrackBtn.style.display = 'block';
+        guessedCorrectlySection.style.display = 'block';
+        guessedCorrectlyButtons.innerHTML = '';
+        players.forEach((player, index) => {
+          const guessBtn = document.createElement('button');
+          guessBtn.className = 'secondary-button';
+          guessBtn.style.margin = '5px';
+          guessBtn.textContent = player.name || `Player ${index + 1}`;
+          guessBtn.addEventListener('click', () => {
+            if (currentTrackYear) {
+              players[index].years.push(currentTrackYear);
+              players[index].years.sort((a, b) => parseInt(a) - parseInt(b));
+              generatePlayersUI();
+              playRandomPlaylistTrack();
+              trackInfoDisplay.style.display = 'none';
+              revealTrackBtn.disabled = false;
+              nextPlaylistTrackBtn.style.display = 'none';
+              guessedCorrectlySection.style.display = 'none';
+            }
+          });
+          guessedCorrectlyButtons.appendChild(guessBtn);
+        });
+      }
     }
 
     function startQRScanner() {
-      if (scannerInitialized) { switchToScreen(scannerScreen); return; }
-      if (scannerStopping) { setTimeout(startQRScanner, 500); return; }
+      if (scannerInitialized) {
+        switchToScreen(scannerScreen);
+        return;
+      }
+      if (scannerStopping) {
+        setTimeout(startQRScanner, 500);
+        return;
+      }
       switchToScreen(scannerScreen);
       readerElement.innerHTML = '';
       statusElement.textContent = "Initializing camera...";
       html5QrCode = new Html5Qrcode("reader");
       Html5Qrcode.getCameras().then(cameras => {
         if (cameras && cameras.length) {
-          const backCamera = cameras.find(camera => camera.label.toLowerCase().includes('back') || camera.label.toLowerCase().includes('environment'));
+          const backCamera = cameras.find(camera => 
+            camera.label.toLowerCase().includes('back') || 
+            camera.label.toLowerCase().includes('environment')
+          );
           const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
-          html5QrCode.start(cameraToUse, { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
+          html5QrCode.start(
+            cameraToUse, 
+            { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
             onScanSuccess,
-            (error) => { if (error !== "QR code parse error, error = QR code not found.") { console.error(`QR Scanner Error: ${error}`); } }
+            (error) => {
+              if (error !== "QR code parse error, error = QR code not found.") {
+                console.error(`QR Scanner Error: ${error}`);
+              }
+            }
           ).then(() => {
             scannerInitialized = true;
             statusElement.textContent = "Ready to scan Spotify code";
@@ -349,7 +661,9 @@
             console.error(`Camera Start Error: ${err}`);
             statusElement.textContent = "Camera error. Please try again.";
             scannerInitialized = false;
-            setTimeout(startQRScanner, 1000);
+            setTimeout(() => {
+              startQRScanner();
+            }, 1000);
           });
         } else {
           statusElement.textContent = "No cameras found";
@@ -364,7 +678,9 @@
     }
 
     async function stopQRScanner() {
-      if (!html5QrCode || !scannerInitialized) return Promise.resolve();
+      if (!html5QrCode || !scannerInitialized) {
+        return Promise.resolve();
+      }
       scannerStopping = true;
       try {
         await html5QrCode.stop();
@@ -379,28 +695,31 @@
     }
 
     function onScanSuccess(decodedText) {
-      const trackIdMatch = decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) ||
-                           decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+      const trackIdMatch = 
+        decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
+        decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
       if (trackIdMatch) {
         const trackId = trackIdMatch[1];
         currentTrackUri = `spotify:track:${trackId}`;
         stopQRScanner().then(() => {
-          if (playerReady) { startPlayback(currentTrackUri); }
+          if (playerReady) {
+            startPlayback(currentTrackUri);
+          }
           switchToScreen(playerScreen);
         });
       }
     }
 
-    // The original startPlayback from your pre_playlist file
     async function startPlayback(trackUri) {
       try {
         if (!deviceId) {
           console.error('No device ID available yet');
           return;
         }
-        // Fetch track details
         const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${trackUri.split(':')[2]}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
         });
         if (!trackResponse.ok) {
           console.error(`Error getting track: ${trackResponse.status}`);
@@ -409,7 +728,6 @@
         const trackData = await trackResponse.json();
         trackDuration = trackData.duration_ms;
         currentTrackName = trackData.name;
-        // Set snippet options based on mode
         if (gameModeSelect.value === 'random10') {
           const maxStartTime = Math.max(0, trackDuration - 10000);
           randomSegmentStart = Math.floor(Math.random() * maxStartTime);
@@ -426,35 +744,51 @@
           snippetDurationElement.style.display = 'none';
           increaseDurationBtn.style.display = 'none';
         }
-        // Transfer playback to our device (without starting yet)
         await fetch('https://api.spotify.com/v1/me/player', {
           method: 'PUT',
-          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device_ids: [deviceId], play: false })
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            device_ids: [deviceId],
+            play: false
+          })
         });
         await new Promise(resolve => setTimeout(resolve, 500));
-        // Start playback
         const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
           method: 'PUT',
-          headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             uris: [trackUri],
             position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
           })
         });
         if (!response.ok && response.status !== 204) {
-          try { spotifyPlayer.resume(); } catch (e) { console.error(`Playback Error: ${e}`); }
+          try {
+            spotifyPlayer.resume();
+          } catch (e) {
+            console.error(`Playback Error: ${e}`);
+          }
         } else {
           isPlaying = true;
           updatePlayPauseButton();
-          if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') { startPositionCheck(); }
+          if (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') {
+            startPositionCheck();
+          }
         }
       } catch (error) {
         console.error(`Playback Error: ${error}`);
         try {
           await fetch(`https://api.spotify.com/v1/me/player/play`, {
             method: 'PUT',
-            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
               uris: [trackUri],
               position_ms: (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive') ? randomSegmentStart : 0
@@ -463,6 +797,29 @@
         } catch (fallbackError) {
           console.error(`Fallback playback error: ${fallbackError}`);
         }
+      }
+      // Update the track info fields (hidden until reveal)
+      try {
+        const trackId = trackUri.split(':')[2];
+        const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+        if (trackResponse.ok) {
+          const trackData = await trackResponse.json();
+          trackNameDisplay.textContent = trackData.name;
+          trackArtistDisplay.textContent = trackData.artists.map(artist => artist.name).join(', ');
+          trackAlbumDisplay.textContent = trackData.album.name;
+          const releaseDateParts = trackData.album.release_date.split('-');
+          currentTrackYear = releaseDateParts[0];
+          trackYearDisplay.textContent = currentTrackYear;
+          revealTrackBtn.disabled = false;
+          trackInfoDisplay.style.display = 'none';
+          guessedCorrectlySection.style.display = 'none';
+        }
+      } catch (error) {
+        console.error(`Error fetching track details: ${error}`);
       }
     }
 
@@ -481,7 +838,9 @@
         spotifyPlayer.pause().then(() => {
           setTimeout(() => {
             spotifyPlayer.seek(randomSegmentStart).then(() => {
-              spotifyPlayer.resume().then(() => { startPositionCheck(); });
+              spotifyPlayer.resume().then(() => {
+                startPositionCheck();
+              });
             });
           }, 300);
         });
@@ -505,6 +864,28 @@
         }
       } catch (error) {
         console.error(`Toggle play/pause error: ${error}`);
+        try {
+          const endpoint = isPlaying ? 
+            'https://api.spotify.com/v1/me/player/pause' : 
+            'https://api.spotify.com/v1/me/player/play';
+          const response = await fetch(endpoint, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+          if (response.ok || response.status === 204) {
+            isPlaying = !isPlaying;
+            updatePlayPauseButton();
+            if (isPlaying && (gameModeSelect.value === 'random10' || gameModeSelect.value === 'progressive')) {
+              startPositionCheck();
+            } else if (!isPlaying) {
+              clearPositionCheckInterval();
+            }
+          }
+        } catch (apiError) {
+          console.error(`API play/pause fallback error: ${apiError}`);
+        }
       }
     }
 
@@ -538,110 +919,139 @@
         await spotifyPlayer.seek(newPosition);
       } catch (error) {
         console.error(`Seek error: ${error}`);
-      }
-    }
-
-    // --- Playlist Mode Functions ---
-    function getPlaylistIdFromUrl(url) {
-      const regex = /(?:playlist\/|spotify:playlist:)([a-zA-Z0-9]+)/;
-      const match = url.match(regex);
-      return match ? match[1] : null;
-    }
-
-    async function fetchPlaylistTracks(playlistId) {
-      try {
-        let allTracks = [];
-        let offset = 0, limit = 100;
-        let response;
-        do {
-          response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
+        try {
+          const response = await fetch('https://api.spotify.com/v1/me/player', {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
           });
-          if (!response.ok) {
-            console.error(`Error fetching playlist: ${response.status}`);
-            break;
+          if (!response.ok) return;
+          const state = await response.json();
+          const currentPosition = state.progress_ms || 0;
+          let newPosition;
+          if (gameModeSelect.value === 'progressive') {
+            newPosition = Math.min(randomSegmentEnd, currentPosition + 10000);
+          } else if (gameModeSelect.value === 'random10') {
+            newPosition = randomSegmentStart;
+          } else {
+            newPosition = Math.min(trackDuration, currentPosition + 10000);
           }
-          const data = await response.json();
-          const tracks = data.items
-            .filter(item => item.track && !item.track.is_local)
-            .map(item => item.track.uri);
-          allTracks = allTracks.concat(tracks);
-          offset += tracks.length;
-        } while (response && offset < response.total);
-        return allTracks;
-      } catch (error) {
-        console.error(error);
-        return [];
+          await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPosition}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+        } catch (apiError) {
+          console.error(`API seek fallback error: ${apiError}`);
+        }
       }
     }
 
-    function getRandomTrackFromPlaylist() {
-      if (playlistTracks.length === 0) return null;
-      const randomIndex = Math.floor(Math.random() * playlistTracks.length);
-      return playlistTracks[randomIndex];
-    }
-
-    async function playRandomPlaylistTrack() {
-      const trackUri = getRandomTrackFromPlaylist();
-      if (!trackUri) {
-        console.error("No track found in playlist.");
-        return;
-      }
-      currentTrackUri = trackUri;
-      await startPlayback(currentTrackUri);
-    }
-
-    // --- Event Listeners ---
+    // Event Listeners
     spotifyLoginBtn.addEventListener('click', initiateSpotifyLogin);
     playPauseBtn.addEventListener('click', togglePlayPause);
     seekForwardBtn.addEventListener('click', seekForward);
+    increaseDurationBtn.addEventListener('click', increaseDuration);
     returnToScannerBtn.addEventListener('click', async () => {
       if (spotifyPlayer && isPlaying) {
-        try { await spotifyPlayer.pause(); } catch (err) { console.error(`Error pausing player: ${err}`); }
+        try {
+          await spotifyPlayer.pause();
+        } catch (err) {
+          console.error(`Error pausing player: ${err}`);
+        }
         isPlaying = false;
       }
       clearPositionCheckInterval();
       await stopQRScanner();
-      setTimeout(startQRScanner, 500);
+      setTimeout(() => {
+        startQRScanner();
+      }, 500);
       isPlaylistMode = false;
+      nextPlaylistTrackBtn.style.display = 'none';
+      playersScoreboard.style.display = 'none';
     });
 
-    gameModeSelect.addEventListener('change', () => { gameModeSwitched = true; });
+    gameModeSelect.addEventListener('change', () => {
+      gameModeSwitched = true;
+      if (gameModeSelect.value !== 'progressive') {
+        snippetDurationElement.style.display = 'none';
+        increaseDurationBtn.style.display = 'none';
+      }
+    });
 
-    // Playlist Mode button: switch to playlist input screen
-    switchToPlaylistBtn.addEventListener('click', () => { switchToScreen(playlistInputScreen); });
-    backToScannerBtn.addEventListener('click', () => { switchToScreen(scannerScreen); startQRScanner(); });
-
-    startPlaylistBtn.addEventListener('click', async () => {
+    startPlaylistGameBtn.addEventListener('click', async () => {
       const playlistUrl = playlistUrlInput.value.trim();
       const playlistId = getPlaylistIdFromUrl(playlistUrl);
       if (!playlistId) {
         alert("Please enter a valid Spotify playlist URL");
         return;
       }
+      playerCount = parseInt(playerCountInput.value) || 2;
+      playerCount = Math.max(1, Math.min(10, playerCount));
+      players = [];
+      for (let i = 0; i < playerCount; i++) {
+        players.push({
+          name: `Player ${i + 1}`,
+          coins: 2,
+          years: []
+        });
+      }
+      startPlaylistGameBtn.textContent = "Loading...";
+      startPlaylistGameBtn.disabled = true;
       playlistTracks = await fetchPlaylistTracks(playlistId);
       if (playlistTracks.length === 0) {
         alert("Could not load tracks from this playlist. Please check the URL and try again.");
+        startPlaylistGameBtn.textContent = "Start Game";
+        startPlaylistGameBtn.disabled = false;
         return;
       }
+      playedTrackIndices = [];
       isPlaylistMode = true;
+      generatePlayersUI();
+      playersScoreboard.style.display = 'block';
+      nextPlaylistTrackBtn.style.display = 'block';
       switchToScreen(playerScreen);
+      playRandomPlaylistTrack();
+      startPlaylistGameBtn.textContent = "Start Game";
+      startPlaylistGameBtn.disabled = false;
+    });
+
+    switchToPlaylistBtn.addEventListener('click', () => {
+      switchToScreen(playlistInputScreen);
+    });
+
+    returnToScannerFromPlaylistBtn.addEventListener('click', () => {
+      startQRScanner();
+    });
+
+    revealTrackBtn.addEventListener('click', revealTrackInfo);
+
+    nextPlaylistTrackBtn.addEventListener('click', () => {
+      trackInfoDisplay.style.display = 'none';
+      revealTrackBtn.disabled = false;
+      nextPlaylistTrackBtn.style.display = 'none';
+      guessedCorrectlySection.style.display = 'none';
       playRandomPlaylistTrack();
     });
 
-    // --- Initialization ---
     function init() {
-      const hash = window.location.hash.substring(1).split('&').reduce((initial, item) => {
-        if (item) {
-          const parts = item.split('=');
-          initial[parts[0]] = decodeURIComponent(parts[1]);
-        }
-        return initial;
-      }, {});
+      const hash = window.location.hash
+        .substring(1)
+        .split('&')
+        .reduce((initial, item) => {
+          if (item) {
+            var parts = item.split('=');
+            initial[parts[0]] = decodeURIComponent(parts[1]);
+          }
+          return initial;
+        }, {});
       if (hash.access_token) {
         accessToken = hash.access_token;
         window.location.hash = '';
-        if (window.Spotify) { initializeSpotifyPlayer(); }
+        if (window.Spotify) {
+          initializeSpotifyPlayer();
+        }
         startQRScanner();
       } else {
         switchToScreen(loginScreen);
