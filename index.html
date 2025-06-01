@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spotify QR Scanner + PDF Generator</title>
-  <!-- html5-qrcode & Spotify SDK remain as before -->
+  <!-- html5-qrcode & Spotify SDK (if still used elsewhere) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
 
@@ -221,7 +221,7 @@
     <p>Click below to connect your Spotify account</p>
     <button id="spotify-login" class="spotify-button">Connect Spotify</button>
     <p id="error-message" style="color: red;"></p>
-    <!-- New Generate PDF button on the login screen -->
+    <!-- Generate PDF button on the login screen -->
     <button id="generate-pdf-login" class="secondary-button">Generate PDF from Playlist</button>
   </div>
 
@@ -235,7 +235,7 @@
     <div id="status" class="scanner-status">Scan a Spotify QR Code</div>
     <div id="reader"></div>
     <button id="switch-to-playlist" class="secondary-button" style="margin-top: 20px;">Use Playlist Mode</button>
-    <!-- New Generate PDF button on the scanner screen -->
+    <!-- Generate PDF button on the scanner screen -->
     <button id="generate-pdf-scanner" class="secondary-button" style="margin-top: 10px;">Generate PDF from Playlist</button>
   </div>
 
@@ -269,10 +269,10 @@
       <button id="return-to-scanner" class="secondary-button">Scan New Song</button>
     </div>
     <div id="track-info-display" style="display: none; margin-top: 20px; text-align: left; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px;">
-      <p id="track-name-display"><strong>🎵 Song:</strong> <span></span></p>
-      <p id="track-artist-display"><strong>👤 Artist:</strong> <span></span></p>
-      <p id="track-album-display"><strong>💿 Album:</strong> <span></span></p>
-      <p id="track-year-display"><strong>📅 Release Year:</strong> <span></span></p>
+      <p id="track-name-display"><strong>Song:</strong> <span></span></p>
+      <p id="track-artist-display"><strong>Artist:</strong> <span></span></p>
+      <p id="track-album-display"><strong>Album:</strong> <span></span></p>
+      <p id="track-year-display"><strong>Year:</strong> <span></span></p>
       <div id="guessed-correctly-section" style="margin-top: 15px; text-align: center;">
         <p>Who guessed correctly?</p>
         <div id="guessed-correctly-buttons"></div>
@@ -630,27 +630,27 @@
           const x0 = margin + col * cellWidth;
           const y0 = margin + row * cellHeight;
 
-          // Build lines: "🎵 Title", "👤 Artist", "💿 Album", "📅 Year"
+          // Build lines: "Song:", "Artist:", "Album:", "Year:"
           const lines = [];
-          const maxTextWidth = cellWidth - 10; // 5pt padding each side
+          const maxTextWidth = cellWidth - 2 * 8; // 8pt padding on each side
 
-          // Title
-          const titleLabel = '🎵 ';
+          // Song title
+          const titleLabel = 'Song: ';
           const titleLines = wrapText(titleLabel + track.name, maxTextWidth);
           lines.push(...titleLines);
 
           // Artists
-          const artistLabel = '👤 ';
+          const artistLabel = 'Artist: ';
           const artistLines = wrapText(artistLabel + track.artists, maxTextWidth);
           lines.push(...artistLines);
 
           // Album
-          const albumLabel = '💿 ';
+          const albumLabel = 'Album: ';
           const albumLines = wrapText(albumLabel + track.album, maxTextWidth);
           lines.push(...albumLines);
 
           // Release Year
-          const yearLabel = '📅 ';
+          const yearLabel = 'Year: ';
           const year = (track.release_date ? track.release_date.split('-')[0] : 'N/A');
           const yearLines = wrapText(yearLabel + year, maxTextWidth);
           lines.push(...yearLines);
@@ -845,8 +845,7 @@
           await fetch(`https://api.spotify.com/v1/me/player/play`, {
             method: 'PUT',
             headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
+              'Authorization': `Bearer ${accessToken}`
             },
             body: JSON.stringify({
               uris: [trackUri],
