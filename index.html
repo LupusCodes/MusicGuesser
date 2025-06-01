@@ -4,13 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spotify QR Scanner + PDF Generator (with Emojis)</title>
-  <!-- html5-qrcode & Spotify SDK -->
+
+  <!-- html5‐qrcode & Spotify Web Playback SDK -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
 
-  <!-- jsPDF for PDF creation -->
+  <!-- jsPDF (for PDF creation) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- QRious for QR‐code generation -->
+  <!-- QRious (for QR code generation) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 
   <style>
@@ -220,8 +221,6 @@
     <p>Click below to connect your Spotify account</p>
     <button id="spotify-login" class="spotify-button">Connect Spotify</button>
     <p id="error-message" style="color: red;"></p>
-    <!-- Generate PDF button -->
-    <button id="generate-pdf-login" class="secondary-button">Generate PDF from Playlist</button>
   </div>
 
   <!-- ===== SCANNER SCREEN ===== -->
@@ -233,9 +232,13 @@
     </select>
     <div id="status" class="scanner-status">Scan a Spotify QR Code</div>
     <div id="reader"></div>
-    <button id="switch-to-playlist" class="secondary-button" style="margin-top: 20px;">Use Playlist Mode</button>
-    <!-- Generate PDF button -->
-    <button id="generate-pdf-scanner" class="secondary-button" style="margin-top: 10px;">Generate PDF from Playlist</button>
+    <button id="switch-to-playlist" class="secondary-button" style="margin-top: 20px;">
+      Use Playlist Mode
+    </button>
+    <!-- Only QR scanner screen has the “Generate PDF” button now -->
+    <button id="generate-pdf-scanner" class="secondary-button" style="margin-top: 10px;">
+      Generate PDF from Playlist
+    </button>
   </div>
 
   <!-- ===== PLAYLIST INPUT SCREEN ===== -->
@@ -280,7 +283,7 @@
     <div id="players-scoreboard" style="display: none; margin-top: 20px;"></div>
   </div>
 
-  <!-- ===== HIDDEN CANVAS FOR EMOJI‐RICH METADATA ===== -->
+  <!-- ===== HIDDEN CANVAS FOR EMOJI METADATA ===== -->
   <canvas id="text-canvas" style="display:none;"></canvas>
 
   <script>
@@ -327,7 +330,6 @@
     const returnToScannerBtn = document.getElementById('return-to-scanner');
     const increaseDurationBtn = document.getElementById('increase-duration');
     const snippetDurationElement = document.getElementById('snippet-duration');
-    const generatePdfLoginBtn = document.getElementById('generate-pdf-login');
     const generatePdfScannerBtn = document.getElementById('generate-pdf-scanner');
 
     let accessToken = null;
@@ -554,13 +556,13 @@
       const fontSize = 12;
       const lineHeight = fontSize * 1.2;
 
-      // Canvas setup (1 pt ≈ 1 px so set canvas = cellWidth×cellHeight px)
+      // Canvas setup (1 pt ≈ 1 px)
       const canvas = document.getElementById('text-canvas');
       canvas.width = Math.ceil(cellWidth);
       canvas.height = Math.ceil(cellHeight);
       const ctx = canvas.getContext('2d');
 
-      // Wrap text routine: return array of lines fitting maxWidth (in px)
+      // Wrap text routine
       function wrapTextForCanvas(text, maxWidthPx) {
         const words = text.split(' ');
         const lines = [];
@@ -675,8 +677,7 @@
       loaderBtn.disabled = false;
     }
 
-    // Attach PDF listeners
-    generatePdfLoginBtn.addEventListener('click', generatePDFfromPlaylist);
+    // Attach PDF listener
     generatePdfScannerBtn.addEventListener('click', generatePDFfromPlaylist);
 
     // ===== QR SCANNER LOGIC =====
@@ -793,7 +794,7 @@
           increaseDurationBtn.style.display = 'none';
         }
 
-        // Transfer playback to our Web Playback SDK device first
+        // Transfer playback to Web Playback SDK device
         await fetch('https://api.spotify.com/v1/me/player', {
           method: 'PUT',
           headers: {
@@ -816,7 +817,6 @@
           })
         });
         if (!playResp.ok && playResp.status !== 204) {
-          // fallback to SDK resume
           try { await spotifyPlayer.resume(); } catch (e) { console.error(e); }
         } else {
           isPlaying = true;
@@ -827,7 +827,7 @@
         }
       } catch (error) {
         console.error(`Playback Error: ${error}`);
-        // fallback single endpoint
+        // fallback
         try {
           await fetch(`https://api.spotify.com/v1/me/player/play`, {
             method: 'PUT',
@@ -843,7 +843,7 @@
         }
       }
 
-      // Fetch track details to show when “Reveal Song”
+      // Fetch details for “Reveal Song”
       try {
         const trackId = trackUri.split(':')[2];
         const trackResponse2 = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
@@ -960,7 +960,7 @@
         await spotifyPlayer.seek(newPos);
       } catch (error) {
         console.error(`Seek error: ${error}`);
-        // fallback via Web API
+        // fallback
         try {
           const resp = await fetch('https://api.spotify.com/v1/me/player', {
             headers: { 'Authorization': `Bearer ${accessToken}` }
