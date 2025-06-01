@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spotify QR Scanner + PDF Generator (with Emojis)</title>
+  <title>Spotify QR Scanner + PDF Generator (with Square Overlay)</title>
 
   <!-- html5‐qrcode & Spotify Web Playback SDK -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
@@ -49,6 +49,7 @@
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
       aspect-ratio: 1/1;
       overflow: hidden;
+      position: relative;
     }
     .spotify-button {
       background-color: #1DB954;
@@ -235,7 +236,6 @@
     <button id="switch-to-playlist" class="secondary-button" style="margin-top: 20px;">
       Use Playlist Mode
     </button>
-    <!-- Only QR scanner screen has the “Generate PDF” button now -->
     <button id="generate-pdf-scanner" class="secondary-button" style="margin-top: 10px;">
       Generate PDF from Playlist
     </button>
@@ -680,7 +680,7 @@
     // Attach PDF listener
     generatePdfScannerBtn.addEventListener('click', generatePDFfromPlaylist);
 
-    // ===== QR SCANNER LOGIC =====
+    // ===== QR SCANNER LOGIC (with square overlay) =====
     function startQRScanner() {
       if (scannerInitialized) {
         switchToScreen(scannerScreen);
@@ -694,6 +694,7 @@
       readerElement.innerHTML = '';
       statusElement.textContent = "Initializing camera...";
       html5QrCode = new Html5Qrcode("reader");
+
       Html5Qrcode.getCameras().then(cameras => {
         if (cameras && cameras.length) {
           const backCamera = cameras.find(cam =>
@@ -701,9 +702,16 @@
             cam.label.toLowerCase().includes('environment')
           );
           const cameraId = backCamera ? backCamera.id : cameras[0].id;
+
+          // Compute a square boxSize (px) based on readerElement
+          const boxSize = Math.min(readerElement.clientWidth * 0.9, 350);
+
           html5QrCode.start(
             cameraId,
-            { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
+            { 
+              fps: 10,
+              qrbox: { width: boxSize, height: boxSize }   // Force square
+            },
             onScanSuccess,
             error => {
               if (error !== "QR code parse error, error = QR code not found.") {
