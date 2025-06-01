@@ -3,9 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spotify QR Scanner</title>
+  <title>Spotify QR Scanner + PDF Generator</title>
+  <!-- html5-qrcode & Spotify SDK remain as before -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
+
+  <!-- jsPDF (for PDF creation) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- QRious (for client-side QR code generation) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
   <style>
     body {
       font-family: 'Arial', sans-serif;
@@ -208,13 +215,17 @@
   </style>
 </head>
 <body>
+  <!-- ===== LOGIN SCREEN ===== -->
   <div id="login-screen" class="screen">
     <h2 class="app-title">Spotify QR Scanner</h2>
     <p>Click below to connect your Spotify account</p>
     <button id="spotify-login" class="spotify-button">Connect Spotify</button>
     <p id="error-message" style="color: red;"></p>
+    <!-- New Generate PDF button on the login screen -->
+    <button id="generate-pdf-login" class="secondary-button">Generate PDF from Playlist</button>
   </div>
 
+  <!-- ===== SCANNER SCREEN ===== -->
   <div id="scanner-screen" class="screen">
     <select id="game-mode" class="game-mode-select">
       <option value="full">Full Song</option>
@@ -224,8 +235,11 @@
     <div id="status" class="scanner-status">Scan a Spotify QR Code</div>
     <div id="reader"></div>
     <button id="switch-to-playlist" class="secondary-button" style="margin-top: 20px;">Use Playlist Mode</button>
+    <!-- New Generate PDF button on the scanner screen -->
+    <button id="generate-pdf-scanner" class="secondary-button" style="margin-top: 10px;">Generate PDF from Playlist</button>
   </div>
 
+  <!-- ===== PLAYLIST INPUT SCREEN ===== -->
   <div id="playlist-input-screen" class="screen">
     <h2 class="app-title">Playlist Mode</h2>
     <div class="input-container">
@@ -240,6 +254,7 @@
     <button id="return-to-scanner-from-playlist" class="secondary-button">Back to Scanner</button>
   </div>
 
+  <!-- ===== PLAYER SCREEN ===== -->
   <div id="player-screen" class="screen">
     <div id="current-track-info">Ready to play...</div>
     <div class="player-controls">
@@ -267,13 +282,12 @@
   </div>
 
   <script>
-    // IMPORTANT: Replace with YOUR Spotify Client ID
+    // ===== SPOTIFY SDK / LOGIN / SCANNING LOGIC (unchanged except for new buttons) =====
     const CLIENT_ID = '1325a171deaa4a0d91bf676e43c8485c';
-    // Updated SCOPES (added playlist-read-private)
     const REDIRECT_URI = window.location.origin + window.location.pathname;
     const SCOPES = [
-      'user-read-playback-state', 
-      'user-modify-playback-state', 
+      'user-read-playback-state',
+      'user-modify-playback-state',
       'user-read-currently-playing',
       'streaming',
       'playlist-read-private'
@@ -311,6 +325,10 @@
     const returnToScannerBtn = document.getElementById('return-to-scanner');
     const increaseDurationBtn = document.getElementById('increase-duration');
     const snippetDurationElement = document.getElementById('snippet-duration');
+
+    // NEW: Generate PDF buttons
+    const generatePdfLoginBtn = document.getElementById('generate-pdf-login');
+    const generatePdfScannerBtn = document.getElementById('generate-pdf-scanner');
 
     let accessToken = null;
     let html5QrCode = null;
@@ -455,7 +473,7 @@
       }
     }
 
-    // Updated regex to support Spotify's own playlist links
+    // Extract playlist ID (same regex as before)
     function getPlaylistIdFromUrl(url) {
       const regex = /(?:spotify:playlist:|https?:\/\/open\.spotify\.com\/playlist\/)([a-zA-Z0-9]+)/;
       const match = url.match(regex);
@@ -465,31 +483,39 @@
       return null;
     }
 
+    // Use user’s OAuth token to fetch playlist tracks
     async function fetchPlaylistTracks(playlistId) {
       try {
         let allTracks = [];
         let offset = 0;
         let hasMoreTracks = true;
         while (hasMoreTracks) {
-          const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`, {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`
+          const response = await fetch(
+            `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`
+              }
             }
-          });
+          );
           if (!response.ok) {
             throw new Error(`Error fetching playlist: ${response.status}`);
           }
           const data = await response.json();
           const tracks = data.items
             .filter(item => item.track && !item.track.is_local)
-            .map(item => ({
-              uri: item.track.uri,
-              name: item.track.name,
-              artist: item.track.artists.map(artist => artist.name).join(', '),
-              album: item.track.album.name,
-              albumReleaseDate: item.track.album.release_date
-            }));
-          allTracks = [...allTracks, ...tracks];
+            .map(item => {
+              const t = item.track;
+              return {
+                id: t.id,
+                external_url: t.external_urls.spotify,
+                name: t.name,
+                artists: t.artists.map(a => a.name).join(', '),
+                album: t.album.name,
+                release_date: t.album.release_date
+              };
+            });
+          allTracks = allTracks.concat(tracks);
           offset += data.items.length;
           hasMoreTracks = data.next !== null && data.items.length > 0;
         }
@@ -500,138 +526,164 @@
       }
     }
 
-    function getRandomUnplayedTrack() {
-      if (playlistTracks.length === 0) {
-        return null;
-      }
-      if (playedTrackIndices.length === playlistTracks.length) {
-        alert("All songs have been played! Restarting playlist.");
-        playedTrackIndices = [];
-      }
-      let randomIndex;
-      do {
-        randomIndex = Math.floor(Math.random() * playlistTracks.length);
-      } while (playedTrackIndices.includes(randomIndex));
-      playedTrackIndices.push(randomIndex);
-      currentPlaylistIndex = randomIndex;
-      return playlistTracks[randomIndex];
-    }
-
-    async function playRandomPlaylistTrack() {
-      const track = getRandomUnplayedTrack();
-      if (!track) {
-        console.error("No tracks available to play");
+    // ====== PDF‐GENERATION LOGIC (using jsPDF & QRious) ======
+    async function generatePDFfromPlaylist() {
+      if (!accessToken) {
+        alert('Please log in with Spotify first.');
         return;
       }
-      trackInfoDisplay.style.display = 'none';
-      currentTrackUri = track.uri;
-      currentTrackName = track.name;
-      const releaseDateParts = track.albumReleaseDate.split('-');
-      currentTrackYear = releaseDateParts[0];
-      if (playerReady) {
-        await startPlayback(currentTrackUri);
+
+      const playlistUrl = prompt('Enter a Spotify Playlist URL:');
+      if (!playlistUrl) return;
+
+      const playlistId = getPlaylistIdFromUrl(playlistUrl.trim());
+      if (!playlistId) {
+        alert('Invalid Spotify playlist URL.');
+        return;
       }
-    }
 
-    // Adjust the players scoreboard layout based on the number of players
-    function generatePlayersUI() {
-      playersScoreboard.innerHTML = '';
-      if (players.length <= 3) {
-        // Center players with flex layout
-        playersScoreboard.style.display = 'flex';
-        playersScoreboard.style.flexDirection = 'row';
-        playersScoreboard.style.justifyContent = 'center';
-        playersScoreboard.style.alignItems = 'center';
-        playersScoreboard.style.flexWrap = 'wrap';
-        playersScoreboard.style.gap = '20px';
-      } else {
-        // Use a grid with two columns
-        playersScoreboard.style.display = 'grid';
-        playersScoreboard.style.gridTemplateColumns = 'repeat(2, 1fr)';
-        playersScoreboard.style.gap = '20px';
+      // Disable while loading
+      const loaderBtn = document.activeElement;
+      loaderBtn.textContent = 'Loading…';
+      loaderBtn.disabled = true;
+
+      const tracks = await fetchPlaylistTracks(playlistId);
+      if (tracks.length === 0) {
+        alert('Could not load tracks or playlist is empty.');
+        loaderBtn.textContent = 'Generate PDF from Playlist';
+        loaderBtn.disabled = false;
+        return;
       }
-      players.forEach((player, index) => {
-        const playerDiv = document.createElement('div');
-        playerDiv.className = 'player-scoreboard-item';
 
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.className = 'player-name-input';
-        nameInput.value = player.name;
-        nameInput.placeholder = `Player ${index + 1}`;
-        nameInput.addEventListener('input', (e) => {
-          players[index].name = e.target.value;
-        });
-        const scoreControls = document.createElement('div');
-        scoreControls.className = 'score-controls';
+      // Initialize jsPDF (A4, portrait, points)
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+      const pageWidth = doc.internal.pageSize.getWidth();   // ~595.28
+      const pageHeight = doc.internal.pageSize.getHeight(); // ~841.89
+      const margin = 40; // left/right/top/bottom margin
+      const cols = 2;
+      const rows = 3;
+      const cellWidth = (pageWidth - 2 * margin) / cols;
+      const cellHeight = (pageHeight - 2 * margin) / rows;
+      const fontSize = 12;
+      const lineHeight = fontSize * 1.2;
 
-        const minusBtn = document.createElement('button');
-        minusBtn.className = 'score-button';
-        minusBtn.textContent = '-';
-        minusBtn.addEventListener('click', () => {
-          if (players[index].coins > 0) {
-            players[index].coins--;
-            coinDisplay.textContent = players[index].coins;
+      // Helper: wrap text to fit inside maxWidth
+      function wrapText(text, maxWidth) {
+        const words = text.split(' ');
+        let lines = [];
+        let current = '';
+        for (let w of words) {
+          const test = current ? (current + ' ' + w) : w;
+          const testWidth = doc.getTextWidth(test) * (fontSize / 16);
+          if (testWidth <= maxWidth) {
+            current = test;
+          } else {
+            if (current) lines.push(current);
+            current = w;
           }
-        });
-        const coinDisplay = document.createElement('div');
-        coinDisplay.className = 'coin-display';
-        coinDisplay.textContent = player.coins;
-        const plusBtn = document.createElement('button');
-        plusBtn.className = 'score-button';
-        plusBtn.textContent = '+';
-        plusBtn.addEventListener('click', () => {
-          players[index].coins++;
-          coinDisplay.textContent = players[index].coins;
-        });
-        scoreControls.appendChild(minusBtn);
-        scoreControls.appendChild(coinDisplay);
-        scoreControls.appendChild(plusBtn);
-
-        const yearTilesContainer = document.createElement('div');
-        yearTilesContainer.className = 'year-tiles-container';
-        player.years.forEach(year => {
-          const yearTile = document.createElement('div');
-          yearTile.className = 'year-tile';
-          yearTile.textContent = year;
-          yearTilesContainer.appendChild(yearTile);
-        });
-        playerDiv.appendChild(nameInput);
-        playerDiv.appendChild(scoreControls);
-        playerDiv.appendChild(yearTilesContainer);
-        playersScoreboard.appendChild(playerDiv);
-      });
-    }
-
-    function revealTrackInfo() {
-      trackInfoDisplay.style.display = 'block';
-      revealTrackBtn.disabled = true;
-      if (isPlaylistMode) {
-        nextPlaylistTrackBtn.style.display = 'block';
-        guessedCorrectlySection.style.display = 'block';
-        guessedCorrectlyButtons.innerHTML = '';
-        players.forEach((player, index) => {
-          const guessBtn = document.createElement('button');
-          guessBtn.className = 'secondary-button';
-          guessBtn.style.margin = '5px';
-          guessBtn.textContent = player.name || `Player ${index + 1}`;
-          guessBtn.addEventListener('click', () => {
-            if (currentTrackYear) {
-              players[index].years.push(currentTrackYear);
-              players[index].years.sort((a, b) => parseInt(a) - parseInt(b));
-              generatePlayersUI();
-              playRandomPlaylistTrack();
-              trackInfoDisplay.style.display = 'none';
-              revealTrackBtn.disabled = false;
-              nextPlaylistTrackBtn.style.display = 'none';
-              guessedCorrectlySection.style.display = 'none';
-            }
-          });
-          guessedCorrectlyButtons.appendChild(guessBtn);
-        });
+        }
+        if (current) lines.push(current);
+        return lines;
       }
+
+      // Process each group of 6 tracks
+      for (let i = 0; i < tracks.length; i += 6) {
+        const group = tracks.slice(i, i + 6);
+
+        // —— 1) QR CODE PAGE ——
+        for (let idx = 0; idx < group.length; idx++) {
+          const track = group[idx];
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const x0 = margin + col * cellWidth;
+          const y0 = margin + row * cellHeight;
+          const centerX = x0 + cellWidth / 2;
+          const centerY = y0 + cellHeight / 2;
+          const imgSize = Math.min(cellWidth, cellHeight) * 0.8;
+
+          // Generate QR code as DataURL
+          const qr = new QRious({
+            value: track.external_url,
+            size: Math.floor(imgSize)
+          });
+          const qrDataUrl = qr.toDataURL('image/png');
+          // Add QR image to PDF, centered
+          doc.addImage(
+            qrDataUrl,
+            'PNG',
+            centerX - imgSize / 2,
+            centerY - imgSize / 2,
+            imgSize,
+            imgSize
+          );
+        }
+        doc.addPage();
+
+        // —— 2) METADATA PAGE ——
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(fontSize);
+        for (let idx = 0; idx < group.length; idx++) {
+          const track = group[idx];
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const x0 = margin + col * cellWidth;
+          const y0 = margin + row * cellHeight;
+
+          // Build lines: "🎵 Title", "👤 Artist", "💿 Album", "📅 Year"
+          const lines = [];
+          const maxTextWidth = cellWidth - 10; // 5pt padding each side
+
+          // Title
+          const titleLabel = '🎵 ';
+          const titleLines = wrapText(titleLabel + track.name, maxTextWidth);
+          lines.push(...titleLines);
+
+          // Artists
+          const artistLabel = '👤 ';
+          const artistLines = wrapText(artistLabel + track.artists, maxTextWidth);
+          lines.push(...artistLines);
+
+          // Album
+          const albumLabel = '💿 ';
+          const albumLines = wrapText(albumLabel + track.album, maxTextWidth);
+          lines.push(...albumLines);
+
+          // Release Year
+          const yearLabel = '📅 ';
+          const year = (track.release_date ? track.release_date.split('-')[0] : 'N/A');
+          const yearLines = wrapText(yearLabel + year, maxTextWidth);
+          lines.push(...yearLines);
+
+          // Calculate total text height
+          const totalTextHeight = lines.length * lineHeight;
+          // Vertical‐center within cell:
+          let startY = y0 + (cellHeight - totalTextHeight) / 2 + lineHeight;
+
+          // Print each line, centered horizontally in the cell
+          for (let line of lines) {
+            doc.text(line, x0 + cellWidth / 2, startY, { align: 'center' });
+            startY += lineHeight;
+          }
+        }
+
+        // Only add a new page if there are more groups following
+        if (i + 6 < tracks.length) {
+          doc.addPage();
+        }
+      }
+
+      // Trigger download
+      doc.save('playlist.pdf');
+      loaderBtn.textContent = 'Generate PDF from Playlist';
+      loaderBtn.disabled = false;
     }
 
+    // ===== EVENT LISTENERS: “Generate PDF” buttons =====
+    generatePdfLoginBtn.addEventListener('click', generatePDFfromPlaylist);
+    generatePdfScannerBtn.addEventListener('click', generatePDFfromPlaylist);
+
+    // ===== REST OF YOUR ORIGINAL CODE (unchanged, except minor adjustments) =====
     function startQRScanner() {
       if (scannerInitialized) {
         switchToScreen(scannerScreen);
@@ -647,13 +699,13 @@
       html5QrCode = new Html5Qrcode("reader");
       Html5Qrcode.getCameras().then(cameras => {
         if (cameras && cameras.length) {
-          const backCamera = cameras.find(camera => 
-            camera.label.toLowerCase().includes('back') || 
+          const backCamera = cameras.find(camera =>
+            camera.label.toLowerCase().includes('back') ||
             camera.label.toLowerCase().includes('environment')
           );
           const cameraToUse = backCamera ? backCamera.id : cameras[0].id;
           html5QrCode.start(
-            cameraToUse, 
+            cameraToUse,
             { fps: 10, qrbox: Math.min(readerElement.clientWidth * 0.9, 350) },
             onScanSuccess,
             (error) => {
@@ -702,8 +754,8 @@
     }
 
     function onScanSuccess(decodedText) {
-      const trackIdMatch = 
-        decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) || 
+      const trackIdMatch =
+        decodedText.match(/spotify:track:([a-zA-Z0-9]+)/) ||
         decodedText.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
       if (trackIdMatch) {
         const trackId = trackIdMatch[1];
@@ -871,9 +923,10 @@
       } catch (error) {
         console.error(`Toggle play/pause error: ${error}`);
         try {
-          const endpoint = isPlaying ? 
-            'https://api.spotify.com/v1/me/player/pause' : 
-            'https://api.spotify.com/v1/me/player/play';
+          const endpoint =
+            isPlaying ?
+              'https://api.spotify.com/v1/me/player/pause' :
+              'https://api.spotify.com/v1/me/player/play';
           const response = await fetch(endpoint, {
             method: 'PUT',
             headers: {
@@ -1070,6 +1123,136 @@
       clearPositionCheckInterval();
       stopQRScanner();
     });
+
+    // The playlist‐mode helper functions remain unchanged:
+    function getRandomUnplayedTrack() {
+      if (playlistTracks.length === 0) {
+        return null;
+      }
+      if (playedTrackIndices.length === playlistTracks.length) {
+        alert("All songs have been played! Restarting playlist.");
+        playedTrackIndices = [];
+      }
+      let randomIndex;
+      do {
+        randomIndex = Math.floor(Math.random() * playlistTracks.length);
+      } while (playedTrackIndices.includes(randomIndex));
+      playedTrackIndices.push(randomIndex);
+      currentPlaylistIndex = randomIndex;
+      return playlistTracks[randomIndex];
+    }
+
+    async function playRandomPlaylistTrack() {
+      const track = getRandomUnplayedTrack();
+      if (!track) {
+        console.error("No tracks available to play");
+        return;
+      }
+      trackInfoDisplay.style.display = 'none';
+      currentTrackUri = `spotify:track:${track.id}`;
+      currentTrackName = track.name;
+      const releaseDateParts = track.release_date.split('-');
+      currentTrackYear = releaseDateParts[0];
+      if (playerReady) {
+        await startPlayback(currentTrackUri);
+      }
+    }
+
+    function generatePlayersUI() {
+      playersScoreboard.innerHTML = '';
+      if (players.length <= 3) {
+        playersScoreboard.style.display = 'flex';
+        playersScoreboard.style.flexDirection = 'row';
+        playersScoreboard.style.justifyContent = 'center';
+        playersScoreboard.style.alignItems = 'center';
+        playersScoreboard.style.flexWrap = 'wrap';
+        playersScoreboard.style.gap = '20px';
+      } else {
+        playersScoreboard.style.display = 'grid';
+        playersScoreboard.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        playersScoreboard.style.gap = '20px';
+      }
+      players.forEach((player, index) => {
+        const playerDiv = document.createElement('div');
+        playerDiv.className = 'player-scoreboard-item';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'player-name-input';
+        nameInput.value = player.name;
+        nameInput.placeholder = `Player ${index + 1}`;
+        nameInput.addEventListener('input', (e) => {
+          players[index].name = e.target.value;
+        });
+        const scoreControls = document.createElement('div');
+        scoreControls.className = 'score-controls';
+
+        const minusBtn = document.createElement('button');
+        minusBtn.className = 'score-button';
+        minusBtn.textContent = '-';
+        minusBtn.addEventListener('click', () => {
+          if (players[index].coins > 0) {
+            players[index].coins--;
+            coinDisplay.textContent = players[index].coins;
+          }
+        });
+        const coinDisplay = document.createElement('div');
+        coinDisplay.className = 'coin-display';
+        coinDisplay.textContent = player.coins;
+        const plusBtn = document.createElement('button');
+        plusBtn.className = 'score-button';
+        plusBtn.textContent = '+';
+        plusBtn.addEventListener('click', () => {
+          players[index].coins++;
+          coinDisplay.textContent = players[index].coins;
+        });
+        scoreControls.appendChild(minusBtn);
+        scoreControls.appendChild(coinDisplay);
+        scoreControls.appendChild(plusBtn);
+
+        const yearTilesContainer = document.createElement('div');
+        yearTilesContainer.className = 'year-tiles-container';
+        player.years.forEach(year => {
+          const yearTile = document.createElement('div');
+          yearTile.className = 'year-tile';
+          yearTile.textContent = year;
+          yearTilesContainer.appendChild(yearTile);
+        });
+        playerDiv.appendChild(nameInput);
+        playerDiv.appendChild(scoreControls);
+        playerDiv.appendChild(yearTilesContainer);
+        playersScoreboard.appendChild(playerDiv);
+      });
+    }
+
+    function revealTrackInfo() {
+      trackInfoDisplay.style.display = 'block';
+      revealTrackBtn.disabled = true;
+      if (isPlaylistMode) {
+        nextPlaylistTrackBtn.style.display = 'block';
+        guessedCorrectlySection.style.display = 'block';
+        guessedCorrectlyButtons.innerHTML = '';
+        players.forEach((player, index) => {
+          const guessBtn = document.createElement('button');
+          guessBtn.className = 'secondary-button';
+          guessBtn.style.margin = '5px';
+          guessBtn.textContent = player.name || `Player ${index + 1}`;
+          guessBtn.addEventListener('click', () => {
+            if (currentTrackYear) {
+              players[index].years.push(currentTrackYear);
+              players[index].years.sort((a, b) => parseInt(a) - parseInt(b));
+              generatePlayersUI();
+              playRandomPlaylistTrack();
+              trackInfoDisplay.style.display = 'none';
+              revealTrackBtn.disabled = false;
+              nextPlaylistTrackBtn.style.display = 'none';
+              guessedCorrectlySection.style.display = 'none';
+            }
+          });
+          guessedCorrectlyButtons.appendChild(guessBtn);
+        });
+      }
+    }
 
     init();
   </script>
