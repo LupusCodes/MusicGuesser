@@ -515,7 +515,25 @@
       }
     }
 
-    // ===== PDF GENERATION WITH CANVAS FOR EMOJIS =====
+// ===== PDF GENERATION WITH CANVAS FOR EMOJIS =====
+    function generateEmojiImage(emoji, size = 24) {
+      const canvas = document.getElementById('text-canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = size;
+      canvas.height = size;
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, size, size);
+      
+      // Set font and draw emoji
+      ctx.font = `${size}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(emoji, size / 2, size / 2);
+      
+      return canvas.toDataURL('image/png');
+    }
+
 async function generatePDFfromPlaylist() {
   if (!accessToken) {
     alert('Please log in with Spotify first.');
@@ -544,25 +562,6 @@ async function generatePDFfromPlaylist() {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-  const canvas = document.createElement('canvas');
-canvas.width = 32;
-canvas.height = 32;
-const ctx = canvas.getContext('2d');
-
-function makeIconImage(label, font = '20px Arial') {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#000';
-  ctx.font = font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, canvas.width / 2, canvas.height / 2);
-  return canvas.toDataURL('image/png');
-}
-
-const iconSong = makeIconImage('🎵');
-const iconArtist = makeIconImage('👤');
-const iconAlbum = makeIconImage('💿');
-const iconYear = makeIconImage('📅');
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 30;
@@ -571,10 +570,16 @@ const iconYear = makeIconImage('📅');
   const gridSize = Math.min((pageWidth - 2 * margin) / cols, (pageHeight - 2 * margin) / rows);
   const cellWidth = gridSize;
   const cellHeight = gridSize;
-  const defaultFontSize = 12;
-  const minFontSize = 8;
-  const yearFontSize = 16;
-  const lineHeightFactor = 1.2;
+  const padding = 15;
+  const maxWidth = cellWidth - (2 * padding);
+
+  // Generate emoji images
+  const emojiImages = {
+    '🎵': generateEmojiImage('🎵', 20),
+    '👤': generateEmojiImage('👤', 20),
+    '💿': generateEmojiImage('💿', 20),
+    '📅': generateEmojiImage('📅', 20)
+  };
 
   function getPosition(idx, mirror = false) {
     const row = Math.floor(idx / cols);
@@ -584,65 +589,79 @@ const iconYear = makeIconImage('📅');
     return { x, y };
   }
 
-  function wrapLines(doc, lines, maxWidth, fontSize) {
-    doc.setFontSize(fontSize);
-    return lines.flatMap(line => doc.splitTextToSize(line, maxWidth));
+  function fitTextInCell(doc, text, maxWidth, startFontSize = 12) {
+    let fontSize = startFontSize;
+    let wrappedText;
+    
+    // Try progressively smaller font sizes until text fits
+    do {
+      doc.setFontSize(fontSize);
+      wrappedText = doc.splitTextToSize(text, maxWidth);
+      fontSize -= 0.5;
+    } while (wrappedText.length * (fontSize + 2) > cellHeight - 60 && fontSize > 6);
+    
+    return { wrappedText, fontSize: fontSize + 0.5 };
   }
 
   for (let i = 0; i < tracks.length; i += 12) {
     const group = tracks.slice(i, i + 12);
 
-    // QR CODE PAGE
+    // --- QR CODE PAGE ---
     group.forEach((track, idx) => {
       const { x, y } = getPosition(idx);
       const centerX = x + cellWidth / 2;
       const centerY = y + cellHeight / 2;
       const imgSize = gridSize * 0.8;
       const qr = new QRious({ value: track.external_url, size: Math.floor(imgSize) });
-      doc.addImage(qr.toDataURL('image/png'), 'PNG', centerX - imgSize / 2, centerY - imgSize / 2, imgSize, imgSize);
+      doc.addImage(qr.toDataURL('image/png'), 'PNG',
+        centerX - imgSize / 2, centerY - imgSize / 2, imgSize, imgSize);
     });
     doc.addPage();
 
-    // INFO PAGE
+    // --- INFO PAGE ---
     group.forEach((track, idx) => {
       const { x, y } = getPosition(idx, true);
       const year = track.release_date?.split('-')[0] || 'N/A';
 
-      // Use emoji renders
-const entries = [
-  { icon: iconSong, text: track.name },
-  { icon: iconArtist, text: track.artists },
-  { icon: iconAlbum, text: track.album },
-  { icon: iconYear, text: year }
-];
+      const trackData = [
+        { emoji: '🎵', text: track.name },
+        { emoji: '👤', text: track.artists },
+        { emoji: '💿', text: track.album },
+        { emoji: '📅', text: year }
+      ];
 
-let fontSize = defaultFontSize;
-let allLines = entries.map(e => doc.splitTextToSize(e.text, cellWidth - 36)); // extra room for icon
+      let currentY = y + padding;
+      const availableHeight = cellHeight - (2 * padding);
+      const lineSpacing = availableHeight / trackData.length;
 
-while (
-  allLines.reduce((sum, lns) => sum + lns.length, 0) * fontSize * lineHeightFactor > cellHeight - 10 &&
-  fontSize > minFontSize
-) {
-  fontSize--;
-  allLines = entries.map(e => doc.splitTextToSize(e.text, cellWidth - 36));
-}
+      trackData.forEach((item, lineIdx) => {
+        const lineY = currentY + (lineIdx * lineSpacing);
+        
+        // Add emoji image
+        const emojiSize = 16;
+        const emojiX = x + padding;
+        const emojiY = lineY;
+        doc.addImage(emojiImages[item.emoji], 'PNG', emojiX, emojiY, emojiSize, emojiSize);
+        
+        // Fit text with appropriate font size
+        const textMaxWidth = maxWidth - emojiSize - 10; // Account for emoji space
+        const isYear = lineIdx === 3;
+        const startFontSize = isYear ? 14 : 12;
+        const { wrappedText, fontSize } = fitTextInCell(doc, item.text, textMaxWidth, startFontSize);
+        
+        doc.setFontSize(fontSize);
+        const textX = x + padding + emojiSize + 10;
+        const textY = lineY + (emojiSize / 2) + (fontSize / 3); // Center text with emoji
+        
+        // Draw each line of wrapped text
+        wrappedText.forEach((line, wrapIdx) => {
+          const finalY = textY + (wrapIdx * (fontSize + 2));
+          doc.text(line, textX, finalY);
+        });
+      });
+    });
 
-const totalLines = allLines.reduce((sum, lns) => sum + lns.length, 0);
-const textHeight = totalLines * fontSize * lineHeightFactor;
-let currentY = y + (cellHeight - textHeight) / 2 + fontSize;
-
-doc.setFontSize(fontSize);
-entries.forEach((entry, idx) => {
-  const lines = allLines[idx];
-  const iconSize = fontSize + 2;
-  lines.forEach((line) => {
-    doc.addImage(entry.icon, 'PNG', x + cellWidth / 2 - 60, currentY - iconSize * 0.75, iconSize, iconSize);
-    doc.text(line, x + cellWidth / 2 - 40, currentY, { align: 'left' });
-    currentY += fontSize * lineHeightFactor;
-  });
-});
-
-    // Draw full grid with outer borders
+    // Draw Grid (INFO page only, incl. outer border)
     doc.setLineWidth(0.5);
     for (let r = 0; r <= rows; r++) {
       const y = margin + r * cellHeight;
