@@ -5,26 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spotify QR Scanner + PDF Generator (with Square Overlay)</title>
 
-  <!-- html5‐qrcode & Spotify Web Playback SDK -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
-
-  <!-- jsPDF (for PDF creation) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- QRious (for QR code generation) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-
-  <style>
-    /* Styles omitted for brevity (unchanged from your original) */
-  </style>
 </head>
 <body>
-  <!-- All HTML structure unchanged from original -->
   <canvas id="text-canvas" style="display:none;"></canvas>
 
   <script>
-    // ... existing setup and logic
-
     async function generatePDFfromPlaylist() {
       if (!accessToken) {
         alert('Please log in with Spotify first.');
@@ -171,8 +160,6 @@
     }
 
     generatePdfScannerBtn.addEventListener('click', generatePDFfromPlaylist);
-
-    // ... rest of the logic remains unchanged
   </script>
 </body>
 </html>
