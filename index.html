@@ -516,7 +516,7 @@
     }
 
     // ===== PDF GENERATION WITH CANVAS FOR EMOJIS =====
-    async function generatePDFfromPlaylist() {
+        async function generatePDFfromPlaylist() {
       if (!accessToken) {
         alert('Please log in with Spotify first.');
         return;
@@ -530,7 +530,6 @@
         return;
       }
 
-      // Disable button while loading
       const loaderBtn = document.activeElement;
       loaderBtn.textContent = 'Loading…';
       loaderBtn.disabled = true;
@@ -543,27 +542,24 @@
         return;
       }
 
-      // Initialize jsPDF (A4, portrait, points)
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
-      const pageWidth = doc.internal.pageSize.getWidth();   // ~595.28
-      const pageHeight = doc.internal.pageSize.getHeight(); // ~841.89
-      const margin = 40; // margins
-      const cols = 2;
-      const rows = 3;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 40;
+      const cols = 3;
+      const rows = 4;
       const cellWidth = (pageWidth - 2 * margin) / cols;
       const cellHeight = (pageHeight - 2 * margin) / rows;
       const fontSize = 12;
       const lineHeight = fontSize * 1.2;
 
-      // Canvas setup (1 pt ≈ 1 px)
       const canvas = document.getElementById('text-canvas');
       canvas.width = Math.ceil(cellWidth);
       canvas.height = Math.ceil(cellHeight);
       const ctx = canvas.getContext('2d');
 
-      // Wrap text routine
-      function wrapTextForCanvas(text, maxWidthPx) {
+      function wrapText(text, maxWidthPx) {
         const words = text.split(' ');
         const lines = [];
         let current = '';
@@ -582,38 +578,29 @@
         return lines;
       }
 
-      // Loop groups of 6 tracks
-      for (let i = 0; i < tracks.length; i += 6) {
-        const group = tracks.slice(i, i + 6);
+      for (let i = 0; i < tracks.length; i += 12) {
+        const group = tracks.slice(i, i + 12);
 
-        // ——— 1) QR CODE PAGE ———
-        for (let idx = 0; idx < group.length; idx++) {
-          const track = group[idx];
+        // QR Code Page
+        group.forEach((track, idx) => {
           const col = idx % cols;
           const row = Math.floor(idx / cols);
-          const x0 = margin + col * cellWidth;
-          const y0 = margin + row * cellHeight;
-          const centerX = x0 + cellWidth / 2;
-          const centerY = y0 + cellHeight / 2;
-          const imgSize = Math.min(cellWidth, cellHeight) * 0.8;
+          const x = margin + col * cellWidth;
+          const y = margin + row * cellHeight;
 
-          const qr = new QRious({
-            value: track.external_url,
-            size: Math.floor(imgSize)
-          });
-          const qrDataUrl = qr.toDataURL('image/png');
+          const qr = new QRious({ value: track.external_url, size: Math.floor(cellWidth * 0.8) });
           doc.addImage(
-            qrDataUrl,
-            'PNG',
-            centerX - imgSize / 2,
-            centerY - imgSize / 2,
-            imgSize,
-            imgSize
+            qr.toDataURL("image/png"),
+            "PNG",
+            x + cellWidth * 0.1,
+            y + cellHeight * 0.1,
+            cellWidth * 0.8,
+            cellHeight * 0.8
           );
-        }
+        });
         doc.addPage();
 
-        // ——— 2) METADATA PAGE ———
+        // Info Page (Mirrored)
         for (let idx = 0; idx < group.length; idx++) {
           const track = group[idx];
           const col = idx % cols;
@@ -621,63 +608,59 @@
           const x0 = margin + col * cellWidth;
           const y0 = margin + row * cellHeight;
 
-          // Clear canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          // Draw text with emojis
-          const labelSong   = '🎵 ';
+          const labelSong = '🎵 ';
           const labelArtist = '👤 ';
-          const labelAlbum  = '💿 ';
-          const labelYear   = '📅 ';
-          const maxTextWidthPx = cellWidth - 16; // 8px padding each side
+          const labelAlbum = '💿 ';
+          const labelYear = '📅 ';
+          const maxTextWidthPx = cellWidth - 16;
 
           ctx.fillStyle = "#000000";
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.font = `${fontSize}pt Arial`;
 
-          // Build lines
-          let lines = [];
-          lines.push(...wrapTextForCanvas(labelSong   + track.name,   maxTextWidthPx));
-          lines.push(...wrapTextForCanvas(labelArtist + track.artists, maxTextWidthPx));
-          lines.push(...wrapTextForCanvas(labelAlbum  + track.album,   maxTextWidthPx));
           const year = track.release_date ? track.release_date.split('-')[0] : 'N/A';
-          lines.push(...wrapTextForCanvas(labelYear + year,           maxTextWidthPx));
+          let lines = [];
+          lines.push(...wrapText(labelSong + track.name, maxTextWidthPx));
+          lines.push(...wrapText(labelArtist + track.artists, maxTextWidthPx));
+          lines.push(...wrapText(labelAlbum + track.album, maxTextWidthPx));
+          lines.push(...wrapText(labelYear + year, maxTextWidthPx));
 
-          // Compute vertical centering
           const totalTextHeightPx = lines.length * lineHeight;
-          let startY = (canvas.height - totalTextHeightPx) / 2;
+          const startY = (canvas.height - totalTextHeightPx) / 2;
 
-          // Draw each line
           for (let j = 0; j < lines.length; j++) {
+            ctx.font = lines[j].startsWith('📅') ? `${fontSize + 2}pt Arial` : `${fontSize}pt Arial`;
             ctx.fillText(lines[j], canvas.width / 2, startY + j * lineHeight);
           }
 
-          // Convert to image and add to PDF
-          const imgDataUrl = canvas.toDataURL('image/png');
-          doc.addImage(
-            imgDataUrl,
-            'PNG',
-            x0,
-            y0,
-            cellWidth,
-            cellHeight
-          );
+          const img = new Image();
+          img.src = canvas.toDataURL("image/png");
+          await new Promise((res) => {
+            img.onload = () => {
+              const mirrorCanvas = document.createElement("canvas");
+              mirrorCanvas.width = canvas.width;
+              mirrorCanvas.height = canvas.height;
+              const mCtx = mirrorCanvas.getContext("2d");
+              mCtx.translate(mirrorCanvas.width, 0);
+              mCtx.scale(-1, 1);
+              mCtx.drawImage(img, 0, 0);
+              const mirroredData = mirrorCanvas.toDataURL("image/png");
+              doc.addImage(mirroredData, "PNG", x0, y0, cellWidth, cellHeight);
+              res();
+            };
+          });
         }
 
-        // Next page if more tracks remain
-        if (i + 6 < tracks.length) {
-          doc.addPage();
-        }
+        if (i + 12 < tracks.length) doc.addPage();
       }
 
-      // Download
-      doc.save('playlist.pdf');
+      doc.save("playlist-12-grid.pdf");
       loaderBtn.textContent = 'Generate PDF from Playlist';
       loaderBtn.disabled = false;
     }
 
-    // Attach PDF listener
     generatePdfScannerBtn.addEventListener('click', generatePDFfromPlaylist);
 
     // ===== QR SCANNER LOGIC (with square overlay) =====
