@@ -516,7 +516,6 @@
     }
 
     // ===== PDF GENERATION WITH CANVAS FOR EMOJIS =====
-    
 async function generatePDFfromPlaylist() {
   if (!accessToken) {
     alert('Please log in with Spotify first.');
@@ -550,35 +549,12 @@ async function generatePDFfromPlaylist() {
   const margin = 30;
   const cols = 3;
   const rows = 4;
-  const cellWidth = (pageWidth - 2 * margin) / cols;
-  const cellHeight = (pageHeight - 2 * margin) / rows;
+  const gridSize = Math.min((pageWidth - 2 * margin) / cols, (pageHeight - 2 * margin) / rows);
+  const cellWidth = gridSize;
+  const cellHeight = gridSize;
   const fontSize = 12;
   const lineHeight = fontSize * 1.2;
   const yearFontSize = 16;
-
-  const canvas = document.getElementById('text-canvas');
-  canvas.width = Math.ceil(cellWidth);
-  canvas.height = Math.ceil(cellHeight);
-  const ctx = canvas.getContext('2d');
-
-  function wrapTextForCanvas(text, maxWidthPx) {
-    const words = text.split(' ');
-    const lines = [];
-    let current = '';
-    ctx.font = `${fontSize}pt Arial`;
-    for (let w of words) {
-      const test = current ? (current + ' ' + w) : w;
-      const testWidth = ctx.measureText(test).width;
-      if (testWidth <= maxWidthPx) {
-        current = test;
-      } else {
-        if (current) lines.push(current);
-        current = w;
-      }
-    }
-    if (current) lines.push(current);
-    return lines;
-  }
 
   function getPosition(idx, mirror = false) {
     const row = Math.floor(idx / cols);
@@ -591,60 +567,60 @@ async function generatePDFfromPlaylist() {
   for (let i = 0; i < tracks.length; i += 12) {
     const group = tracks.slice(i, i + 12);
 
-    // QR PAGE
+    // --- QR CODE PAGE ---
     group.forEach((track, idx) => {
       const { x, y } = getPosition(idx);
       const centerX = x + cellWidth / 2;
       const centerY = y + cellHeight / 2;
-      const imgSize = Math.min(cellWidth, cellHeight) * 0.8;
+      const imgSize = gridSize * 0.8;
       const qr = new QRious({ value: track.external_url, size: Math.floor(imgSize) });
-      doc.addImage(qr.toDataURL('image/png'), 'PNG', centerX - imgSize / 2, centerY - imgSize / 2, imgSize, imgSize);
+      doc.addImage(qr.toDataURL('image/png'), 'PNG',
+        centerX - imgSize / 2, centerY - imgSize / 2, imgSize, imgSize);
     });
     doc.addPage();
 
-    // INFO PAGE (mirrored positions)
+    // --- INFO PAGE ---
     group.forEach((track, idx) => {
       const { x, y } = getPosition(idx, true);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const year = track.release_date?.split('-')[0] || 'N/A';
 
-      const labelSong = '🎵 ' + track.name;
-      const labelArtist = '👤 ' + track.artists;
-      const labelAlbum = '💿 ' + track.album;
-      const year = track.release_date ? track.release_date.split('-')[0] : 'N/A';
-      const labelYear = '📅 ' + year;
+      const lines = [
+        `🎵 ${track.name}`,
+        `👤 ${track.artists}`,
+        `💿 ${track.album}`,
+        `📅 ${year}`
+      ];
 
-      ctx.fillStyle = "#000000";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.font = `${fontSize}pt Arial`;
-
-      const lines = [labelSong, labelArtist, labelAlbum];
-      const wrapped = lines.flatMap(l => wrapTextForCanvas(l, cellWidth - 16));
-      wrapped.push(labelYear);
-
-      const totalTextHeight = wrapped.length * lineHeight + yearFontSize;
-      const startY = (canvas.height - totalTextHeight) / 2;
-      wrapped.forEach((line, j) => {
-        if (line.startsWith('📅')) {
-          ctx.font = `${yearFontSize}pt Arial`; // larger year font
-        } else {
-          ctx.font = `${fontSize}pt Arial`;
-        }
-        ctx.fillText(line, canvas.width / 2, startY + j * lineHeight);
+      const wrappedLines = lines.flatMap((line, i) => {
+        const maxWidth = cellWidth - 20;
+        doc.setFontSize(i === 3 ? yearFontSize : fontSize);
+        return doc.splitTextToSize(line, maxWidth);
       });
 
-      doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, cellWidth, cellHeight);
+      const totalHeight =
+        wrappedLines.length * lineHeight + (yearFontSize - fontSize);
+
+      const textY = y + (cellHeight - totalHeight) / 2 + fontSize;
+
+      let currentY = textY;
+      lines.forEach((line, i) => {
+        const size = i === 3 ? yearFontSize : fontSize;
+        doc.setFontSize(size);
+        const text = doc.splitTextToSize(line, cellWidth - 20);
+        doc.text(text, x + cellWidth / 2, currentY, { align: 'center' });
+        currentY += text.length * lineHeight;
+      });
     });
 
-    // Draw grid lines for INFO PAGE only
+    // Draw Grid (INFO page only, incl. outer border)
     doc.setLineWidth(0.5);
-    for (let r = 1; r < rows; r++) {
+    for (let r = 0; r <= rows; r++) {
       const y = margin + r * cellHeight;
-      doc.line(margin, y, pageWidth - margin, y);
+      doc.line(margin, y, margin + cols * cellWidth, y);
     }
-    for (let c = 1; c < cols; c++) {
+    for (let c = 0; c <= cols; c++) {
       const x = margin + c * cellWidth;
-      doc.line(x, margin, x, pageHeight - margin);
+      doc.line(x, margin, x, margin + rows * cellHeight);
     }
 
     if (i + 12 < tracks.length) doc.addPage();
